@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a12">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>KanjiMon Ultimate</title>
+    <style>
+        /* Destaque da sílaba do Kanji no Vocabulário */
+        #modal-details-vocab b { color: var(--gold); font-weight: 900; text-shadow: 0 0 5px rgba(241,196,15,0.4); }
+        /* Destaque Rosa para Jukujikun (Palavra Inteira / Exceções) */
+        #modal-details-vocab em { color: #ff47a3; font-weight: 900; font-style: normal; text-shadow: 0 0 5px rgba(255,71,163,0.5); }
+
+        /* --- CAIXA DE DIÁLOGO RPG --- */
+        .rpg-dialog-overlay { display: none; position: fixed; inset: 0; z-index: 10000; align-items: flex-end; justify-content: center; padding: 20px; background: transparent; }
+        .rpg-dialog-overlay.active { display: flex; }
+        .rpg-dialog-box { background: linear-gradient(135deg, rgba(20,20,30,0.95), rgba(0,0,0,0.95)); border: 3px solid var(--gold); border-radius: 12px; width: 100%; max-width: 600px; min-height: 100px; padding: 20px; color: #fff; font-size: 18px; font-weight: bold; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.9), inset 0 0 15px rgba(241,196,15,0.2); cursor: pointer; text-align: left; line-height: 1.4; font-family: 'Segoe UI', sans-serif;}
+        .rpg-dialog-arrow { position: absolute; bottom: 15px; right: 20px; color: var(--gold); font-size: 20px; animation: bounceArrow 0.6s infinite alternate; display: none; }
+        @keyframes bounceArrow { 0% { transform: translateY(0); } 100% { transform: translateY(8px); } }
+        
+        @media (max-width: 600px) { .rpg-dialog-box { font-size: 16px; padding: 15px; min-height: 90px; } }
+
+        /* --- LOGOTIPO ANIMADO (FLUTUAÇÃO E BRILHO) --- */
+        .logo-kanjimon {
+            width: 100%;
+            max-width: 320px; /* Tamanho ajustado agora que a imagem está sem sobras */
+            height: auto;
+            display: block;
+            margin: 15px auto 25px auto; /* Margem normal e correta */
+            pointer-events: none;
+            filter: drop-shadow(0 0 10px rgba(52, 152, 219, 0.4)); 
+            animation: floatLogo 4s ease-in-out infinite; 
+            position: relative;
+            z-index: 10;
+        }
+
+        @keyframes floatLogo {
+            0%, 100% { 
+                transform: translateY(0); 
+                filter: drop-shadow(0 0 10px rgba(52, 152, 219, 0.4)); 
+            }
+            50% { 
+                transform: translateY(-8px); 
+                filter: drop-shadow(0 0 25px rgba(52, 152, 219, 0.9)); 
+            }
+        }
+
+        /* --- INDICADOR DE SCROLL MOBILE --- */
+        #scroll-indicator {
+            display: none; /* Escondido no PC */
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 30, 0.95);
+            color: var(--gold);
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            border: 1px solid var(--gold);
+            z-index: 9000;
+            pointer-events: none; /* O clique atravessa ele */
+            box-shadow: 0 5px 15px rgba(0,0,0,0.8);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+        #scroll-indicator.visible {
+            opacity: 1;
+            animation: floatScroll 1.5s infinite ease-in-out;
+        }
+        @keyframes floatScroll {
+            0%, 100% { transform: translate(-50%, 0); }
+            50% { transform: translate(-50%, 8px); }
+        }
+        /* Só aparece em telas de celular */
+        @media (max-width: 600px) {
+            #scroll-indicator { display: block; }
+        }
+        
+        /* --- NINTENDO UI (MENU PRINCIPAL) --- */
+        .menu-panel { background: rgba(20, 20, 30, 0.6); border: 2px solid #333; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+        .menu-panel-title { text-align: left; font-size: 13px; color: #888; font-weight: 900; letter-spacing: 1px; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 15px; text-transform: uppercase; }
+        .menu-btn-grid { display: flex; gap: 12px; }
+        
+        /* Base do Botão */
+        .btn-nintendo { display: flex; align-items: center; justify-content: center; gap: 12px; border: none !important; border-radius: 10px; padding: 14px; font-family: 'Segoe UI', sans-serif; font-weight: bold; font-size: 15px; color: #fff; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s, filter 0.2s; position: relative; overflow: hidden; box-shadow: 0 6px 0 rgba(0,0,0,0.5); text-transform: none; margin: 0; width: 100%; box-sizing: border-box;}
+        
+        /* A Física de Clique (Corrige o Hover Vermelho Antigo) */
+        button.btn-nintendo:hover:not(:disabled) { transform: translateY(2px) !important; filter: brightness(1.1); border-color: transparent !important; }
+        button.btn-nintendo:active:not(:disabled) { transform: translateY(6px) !important; filter: brightness(0.9); }
+        
+        .btn-nintendo .btn-text { display: flex; flex-direction: column; align-items: flex-start; text-align: left; line-height: 1.2;}
+        .btn-nintendo .btn-text strong { font-size: 15px; letter-spacing: 0.5px;}
+        .btn-nintendo .btn-text span { font-size: 11px; font-weight: normal; opacity: 0.8; margin-top: 2px;}
+        .btn-nintendo .btn-icon { font-size: 24px; }
+        
+        /* Cores Blindadas (O !important impede o CSS velho de estragar a cor) */
+        .btn-hunt { background: linear-gradient(135deg, #27ae60, #2ecc71) !important; box-shadow: 0 6px 0 #1e8449 !important; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        button.btn-hunt:hover:not(:disabled) { box-shadow: 0 4px 0 #1e8449 !important; }
+        button.btn-hunt:active:not(:disabled) { box-shadow: 0 0 0 #1e8449 !important; }
+        .btn-hunt .btn-bg-hunt { position: absolute; inset: 0; background: url('https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/fundo-caçada.jpg') center/cover; opacity: 0.3; mix-blend-mode: overlay; pointer-events: none;}
+        
+        .btn-gym { background: linear-gradient(135deg, #8e44ad, #9b59b6) !important; box-shadow: 0 6px 0 #5b2c6f !important; text-shadow: 1px 1px 4px rgba(0,0,0,0.8); border: 1px solid #d2b4de !important;}
+        button.btn-gym:hover:not(:disabled) { box-shadow: 0 4px 0 #5b2c6f !important; }
+        button.btn-gym:active:not(:disabled) { box-shadow: 0 0 0 #5b2c6f !important; }
+        .btn-gym .btn-bg-boss { position: absolute; inset: 0; background: url('https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/arena-boss.png') center/cover; opacity: 0.35; mix-blend-mode: overlay; pointer-events: none;}
+        
+        /* Booster agora centralizado e com limite de largura */
+        .btn-booster { background: linear-gradient(135deg, #f39c12, #f1c40f) !important; color: #000 !important; font-size: 16px; margin: 0 auto 15px auto !important; max-width: 450px; box-shadow: 0 6px 0 #b9770e, 0 0 20px rgba(241,196,15,0.4) !important; text-shadow: none;}
+        button.btn-booster:hover:not(:disabled) { box-shadow: 0 4px 0 #b9770e, 0 0 25px rgba(241,196,15,0.6) !important; }
+        button.btn-booster:active:not(:disabled) { box-shadow: 0 0 0 #b9770e !important; }
+        
+        .btn-heal { background: #2ecc71 !important; color: #000 !important; box-shadow: 0 6px 0 #229954 !important; text-shadow: none;}
+        button.btn-heal:hover:not(:disabled) { box-shadow: 0 4px 0 #229954 !important; }
+        button.btn-heal:active:not(:disabled) { box-shadow: 0 0 0 #229954 !important; }
+        
+        .btn-potion { background: #3498db !important; box-shadow: 0 6px 0 #21618c !important; text-shadow: none;}
+        button.btn-potion:hover:not(:disabled) { box-shadow: 0 4px 0 #21618c !important; }
+        button.btn-potion:active:not(:disabled) { box-shadow: 0 0 0 #21618c !important; }
+        
+        /* Pokedex centralizada e com limite de largura */
+        .btn-pokedex { background: #34495e !important; box-shadow: 0 6px 0 #1a252f !important; font-size: 16px; text-shadow: none; margin: 0 auto !important; max-width: 450px;}
+        button.btn-pokedex:hover:not(:disabled) { box-shadow: 0 4px 0 #1a252f !important; }
+        button.btn-pokedex:active:not(:disabled) { box-shadow: 0 0 0 #1a252f !important; }
+
+        @media (max-width: 600px) {
+            .menu-btn-grid { flex-direction: column; gap: 12px; }
+            .btn-nintendo { justify-content: flex-start; padding: 12px 15px; }
+            .btn-booster, .btn-heal, .btn-potion, .btn-pokedex { justify-content: center; }
+            .menu-panel { padding: 15px; border-width: 1px; }
+        }
+
+        :root { --bg: #0a0a12; --panel: #161625; --primary: #e94560; --text: #eaeaea; --success: #2ecc71; --gold: #f1c40f; --silver: #bdc3c7; --bronze: #cd7f32; --danger: #e74c3c; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); text-align: center; margin: 0; padding: 10px; user-select: none; overflow-x: hidden; touch-action: manipulation; }
+        #game-wrapper { max-width: 850px; margin: 0 auto; background: var(--panel); border: 3px solid #333; border-radius: 10px; padding: 20px; box-shadow: 0 0 30px rgba(0,0,0,0.8); box-sizing: border-box;}
+        
+        /* HUD RPG */
+        .hud { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: #000; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; border: 1px solid #333; font-size: 14px; align-items: center;}
+        .hud > div { background: rgba(255,255,255,0.05); padding: 5px 8px; border-radius: 4px; }
+        .bar-container { width: 100px; background: #222; height: 15px; border-radius: 8px; overflow: hidden; border: 1px solid #555; display: inline-block; vertical-align: middle; margin: 0 5px; }
+        .hp-bar { height: 100%; background: #e74c3c; width: 100%; transition: width 0.3s; }
+        .xp-bar { height: 100%; background: #3498db; width: 0%; transition: width 0.3s; }
+
+        .screen { display: none; padding: 5px; }
+        .screen.active { display: block; animation: fadeIn 0.4s; }
+        button { background: #333; color: white; border: 1px solid #666; padding: 12px 18px; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; text-transform: uppercase; margin: 5px; }
+        button:hover:not(:disabled) { background: var(--primary); border-color: #fff; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+        button:active:not(:disabled) { transform: translateY(0); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* --- ILUMINAÇÃO DE RARIDADE --- */
+        .r-c { border-color: #7f8c8d; }
+        .dex-entry.r-r, .r-r .card-border-clip { border-color: var(--silver); box-shadow: 0 0 15px var(--silver); }
+        .dex-entry.r-sr, .r-sr .card-border-clip { border-color: var(--gold); box-shadow: 0 0 20px var(--gold); }
+        .dex-entry.r-ur, .r-ur .card-border-clip { border-color: #ff9f43; box-shadow: 0 0 25px #ff9f43; animation: ur-pulse 1.5s infinite; }
+        .dex-entry.r-lr, .r-lr .card-border-clip { border-color: #ff00ff; box-shadow: 0 0 35px #ff00ff; animation: rainbow-border 3s infinite; }
+
+        @keyframes rainbow-border { 0% { box-shadow: 0 0 15px #ff0000; border-color: #ff0000; } 33% { box-shadow: 0 0 30px #00ff00; border-color: #00ff00; } 66% { box-shadow: 0 0 30px #0000ff; border-color: #0000ff; } 100% { box-shadow: 0 0 15px #ff0000; border-color: #ff0000; } }
+        @keyframes ur-pulse { 0% { box-shadow: 0 0 10px #ff9f43; } 50% { box-shadow: 0 0 30px #ff9f43; } 100% { box-shadow: 0 0 10px #ff9f43; } }
+
+        /* POKEDEX */
+        .pokedex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin-top: 15px; }
+        .dex-entry { background: rgba(30, 30, 50, 0.6); border: 2px solid #444; padding: 10px; border-radius: 8px; position: relative; transition: 0.2s; cursor: pointer; }
+        .dex-entry:hover { transform: scale(1.05); z-index: 10; }
+        .dex-kanji { font-family: 'Noto Sans JP', 'Yu Gothic', sans-serif; font-size: 40px; margin: 5px 0; background: transparent !important; color: #fff; text-shadow: 2px 2px 4px #000; }
+        .dex-entry.locked { opacity: 0.3; cursor: default; }
+
+        /* Ferramentas Pokedex */
+        .pokedex-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .pokedex-controls { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        .pokedex-controls input { flex: 2; min-width: 140px; padding: 12px; border-radius: 6px; background: #111; border: 1px solid #555; color: #fff; font-size: 14px; }
+        .pokedex-controls select { flex: 1; min-width: 120px; padding: 12px; border-radius: 6px; background: #111; border: 1px solid #555; color: #fff; font-size: 13px; cursor: pointer; }
+        .pokedex-controls input:focus, .pokedex-controls select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 10px rgba(233, 69, 96, 0.3); }
+
+        /* --- MODAL COM EFEITO 3D HOLOGRÁFICO --- */
+        .modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.95); align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s;}
+        .modal.active { display: flex; opacity: 1; }
+        .modal-content { display: flex; flex-direction: column; align-items: center; max-width: 95vw; max-height: 95vh; position: relative; width: 100%;}
+        #modal-image-container { perspective: 1200px; display: flex; justify-content: center; align-items: center; width: 100%;}
+        .card-image-wrapper { position: relative; display: inline-block; border-radius: 12px; max-width: 380px; width: 85vw; transform-style: preserve-3d; will-change: transform; box-shadow: 0 15px 40px rgba(0,0,0,0.8); }
+        .card-border-clip { border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.9); overflow: hidden; background: #111; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; min-height: 300px;}
+        .modal-card-img { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: cover; }
+        .holo, .gloss { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: 0.7; transform: translateZ(15px); transition: opacity 0.3s; border-radius: 12px; }
+        .gloss { mix-blend-mode: screen; opacity: 0.6; }
+        
+        .kanji-overlay { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) translateZ(50px); 
+            font-family: 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif; font-size: 110px; font-weight: 700; 
+            z-index: 10; pointer-events: none; color: #fff; 
+            text-shadow: -2px -2px 0 #111, 2px -2px 0 #111, -2px 2px 0 #111, 2px 2px 0 #111, 0 8px 15px rgba(0,0,0,0.7);
+            line-height: 1; opacity: 0.95; 
+        }
+        
+        .text-rainbow { animation: tr-anim 3s linear infinite; }
+        @keyframes tr-anim { 0% { filter: drop-shadow(0 0 20px #ff0000); } 33% { filter: drop-shadow(0 0 20px #00ff00); } 66% { filter: drop-shadow(0 0 20px #0000ff); } 100% { filter: drop-shadow(0 0 20px #ff0000); } }
+
+        /* --- SISTEMA GACHA 3D DOPAMINÉRGICO --- */
+        .gacha-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 40px; }
+        .gacha-card-wrapper { position: relative; width: 140px; height: 190px; perspective: 1000px; cursor: pointer; transition: transform 0.2s; }
+        .gacha-card-wrapper:hover { transform: scale(1.05) translateY(-5px); }
+        .card-inner { width: 100%; height: 100%; transform-style: preserve-3d; position: relative; }
+        
+        .card-inner.epic-flip { animation: epicFlipAnim 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes epicFlipAnim { 0% { transform: scale(1) rotateY(0deg); } 40% { transform: scale(1.3) rotateY(90deg) translateY(-20px); } 60% { transform: scale(1.3) rotateY(90deg) translateY(-20px); } 100% { transform: scale(1) rotateY(180deg) translateY(0); } }
+        
+        .gacha-card-wrapper.flipped .card-inner { transform: rotateY(180deg); }
+        .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; border: 4px solid #444; }
+        .card-back { background: repeating-linear-gradient(45deg, #111, #111 10px, #222 10px, #222 20px); color: var(--gold); font-size: 50px; font-weight: bold; border-color: #555; transition: 0.3s; }
+        
+        .tease-sr { box-shadow: 0 0 25px rgba(241,196,15,0.6), inset 0 0 10px rgba(241,196,15,0.4); animation: pulseTeaseSR 1.5s infinite; border-color: var(--gold); }
+        .tease-ur { box-shadow: 0 0 35px rgba(255,159,67,0.8), inset 0 0 15px rgba(255,159,67,0.5); animation: pulseTeaseUR 1s infinite; border-color: #ff9f43; }
+        .tease-lr { box-shadow: 0 0 45px rgba(255,0,255,0.8), inset 0 0 20px rgba(0,255,255,0.5); animation: pulseTeaseLR 0.6s infinite; border-color: #ff00ff; }
+        
+        @keyframes pulseTeaseSR { 0%, 100% { box-shadow: 0 0 15px rgba(241,196,15,0.4); } 50% { box-shadow: 0 0 40px rgba(241,196,15,1); } }
+        @keyframes pulseTeaseUR { 0%, 100% { box-shadow: 0 0 20px rgba(255,159,67,0.5); } 50% { box-shadow: 0 0 50px rgba(255,159,67,1); } }
+        @keyframes pulseTeaseLR { 0% { box-shadow: 0 0 30px #ff0000; border-color: #ff0000; } 33% { box-shadow: 0 0 60px #00ff00; border-color: #00ff00; } 66% { box-shadow: 0 0 60px #0000ff; border-color: #0000ff; } 100% { box-shadow: 0 0 30px #ff0000; border-color: #ff0000; } }
+
+        .light-rays { position: absolute; top: 50%; left: 50%; width: 500px; height: 500px; margin-left: -250px; margin-top: -250px; border-radius: 50%; animation: spinRays 8s linear infinite; pointer-events: none; opacity: 0; z-index: -1; transition: opacity 0.8s; }
+        .gacha-card-wrapper.flipped .light-rays.active { opacity: 1; }
+        @keyframes spinRays { from { transform: rotate(0deg) scale(0.8); } to { transform: rotate(360deg) scale(1.1); } }
+
+        .card-flash { position: absolute; inset: -30px; background: #fff; z-index: 100; border-radius: 15px; opacity: 0; pointer-events: none; }
+        .flash-boom { animation: boomFlash 0.6s ease-out forwards; }
+        @keyframes boomFlash { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.6); } }
+
+        .card-front { transform: rotateY(180deg); font-family: 'Noto Sans JP', sans-serif;}
+        .gacha-card-wrapper .card-front.r-c { background: #111; color: #fff; border-color: #7f8c8d; }
+        .gacha-card-wrapper .card-front.r-r { background: radial-gradient(circle at center, #2a2a35, #000); color: var(--silver); border-color: var(--silver); text-shadow: 0 0 8px var(--silver); }
+        .gacha-card-wrapper .card-front.r-sr { background: radial-gradient(circle at center, #3a2e00, #000); color: var(--gold); border-color: var(--gold); text-shadow: 0 0 12px var(--gold); }
+        .gacha-card-wrapper .card-front.r-ur { background: radial-gradient(circle at center, #4a2000, #000); color: #ff9f43; border-color: #ff9f43; text-shadow: 0 0 15px #ff9f43; }
+        .gacha-card-wrapper .card-front.r-lr { background: linear-gradient(135deg, #2b003b, #000, #00133b); background-size: 200% 200%; animation: bg-pan 3s infinite; color: #fff; border-color: #ff00ff; text-shadow: 0 0 20px #ff00ff; }
+        @keyframes bg-pan { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+
+        /* --- ANIMAÇÕES GERAIS --- */
+
+        /* --- EFEITO FOIL NO BOOSTER E QUEDA DE CARTAS --- */
+        .booster-pack { position: relative; overflow: hidden; cursor: pointer; transition: transform 0.1s; z-index: 10; }
+        .booster-pack:active { transform: scale(0.95); } /* Afunda ao clicar */
+        .booster-pack::after {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.4) 55%, transparent 60%);
+            animation: foilGleam 3s infinite linear; pointer-events: none; mix-blend-mode: overlay;
+        }
+        @keyframes foilGleam { 0% { transform: translate(-40%, -40%); } 100% { transform: translate(40%, 40%); } }
+        
+        .click-to-open { color: var(--gold); font-size: 15px; margin-top: 30px; font-weight: 900; letter-spacing: 2px; z-index: 10; animation: pulseTextHint 1.5s infinite; text-shadow: 0 0 10px rgba(0,0,0,1); pointer-events: none; }
+        
+        @keyframes pulseTextHint { 
+            0%, 100% { opacity: 0.6; transform: scale(1); } 
+            50% { opacity: 1; transform: scale(1.05); } 
+        }
+        
+        /* Física das Cartas caindo na mesa */
+        .card-drop-anim { animation: cardDrop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
+        @keyframes cardDrop {
+            0% { transform: translateY(-150px) scale(0.5) rotate(-15deg); opacity: 0; }
+            100% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .booster-overlay { position: fixed; inset: 0; background: radial-gradient(circle at center, #111 0%, #000 80%); display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 9998; }
+        .booster-pack { width: 200px; height: 280px; border-radius: 15px; background: linear-gradient(145deg, #1a1a1a, #000); border: 3px solid var(--gold); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: var(--gold); box-shadow: 0 0 30px rgba(241,196,15,0.5); transform-style: preserve-3d; z-index: 2; text-shadow: 0 0 10px var(--gold); }
+        .energy { position: absolute; width: 350px; height: 350px; border-radius: 50%; background: radial-gradient(circle, rgba(241,196,15,0.4), transparent 65%); animation: energyPulse 1.5s infinite; z-index: 1; }
+        .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.2s ease-out; z-index: 9999; }
+        
+        .particle { position: absolute; width: 10px; height: 10px; background: #fff; border-radius: 50%; pointer-events: none; animation: particleMove 0.8s forwards cubic-bezier(0.1, 0.8, 0.3, 1); z-index: 200; box-shadow: 0 0 15px #fff; }
+        @keyframes particleMove { 0% { transform: translate(0, 0) scale(1.5); opacity: 1; } 100% { transform: translate(var(--x), var(--y)) scale(0); opacity: 0; } }
+        
+        @keyframes packFloat { 0% { transform: translateY(0px) rotateY(0deg); } 50% { transform: translateY(-15px) rotateY(10deg); } 100% { transform: translateY(0px) rotateY(0deg); } }
+        @keyframes packShake { 0%, 100% { transform: translateX(0) rotate(0deg); } 25% { transform: translateX(-15px) rotate(-8deg); } 50% { transform: translateX(15px) rotate(8deg); } 75% { transform: translateX(-15px) rotate(-8deg); } }
+        @keyframes energyPulse { 0% { transform: scale(0.8); opacity: 0.5; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.8); opacity: 0.5; } }
+
+        /* --- SISTEMA DE BATALHA DINÂMICO (Base Limpa) --- */
+        .battle-arena { background: #111; border-radius: 12px; padding: 25px 15px; border: 3px solid #555; margin-bottom: 20px; position: relative; min-height: 220px; overflow: hidden; box-shadow: inset 0 0 50px rgba(0,0,0,0.9); }
+        .arena-flash-red { position: absolute; inset: 0; background: rgba(231, 76, 60, 0.4); opacity: 0; pointer-events: none; z-index: 5; }
+
+        /* --- GINÁSIO ÉPICO (BOSS FIGHT COM IMAGEM) --- */
+        .battle-arena.gym-mode { 
+            /* A película preta/vermelha vem primeiro, a imagem vem depois */
+            background: linear-gradient(rgba(20,0,0,0.7), rgba(0,0,0,0.95)), url('https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/arena-boss.png'); 
+            background-size: cover; 
+            background-position: center; 
+            border-color: var(--danger); 
+            box-shadow: inset 0 0 80px rgba(231, 76, 60, 0.6); 
+        }
+        
+        .boss-sprite { transform: scale(1.3); animation: bossPulse 1.5s infinite alternate !important; border-color: var(--danger) !important; color: #fff; box-shadow: 0 0 40px rgba(231,76,60,0.8) !important; z-index: 50; }
+        
+        @keyframes bossPulse { 
+            0% { transform: scale(1.3) translateY(0); text-shadow: 0 0 10px red; } 
+            100% { transform: scale(1.4) translateY(-8px); text-shadow: 0 0 30px red, 0 0 50px var(--gold); box-shadow: 0 0 70px rgba(231,76,60,1) !important; } 
+        }
+        
+        /* --- CAÇADA CONTÍNUA (EXPLORAÇÃO) --- */
+        .battle-arena.hunt-mode { 
+            /* O gradiente escuro vem primeiro (por cima), a imagem vem depois (por baixo) */
+            background: linear-gradient(rgba(10, 25, 15, 0.5), rgba(0, 10, 5, 0.8)), 
+                        url('https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/gramado.png');
+            background-size: cover; 
+            background-position: center;
+            border-color: #27ae60; 
+            box-shadow: inset 0 0 60px rgba(46, 204, 113, 0.3); 
+        }
+
+        .enemy-sprite { font-size: 90px; background: radial-gradient(circle, rgba(30,30,30,0.9), rgba(0,0,0,0.9)); width: 150px; height: 150px; line-height: 150px; border-radius: 50%; margin: 25px auto 10px; border: 4px solid #fff; transition: transform 0.2s, box-shadow 0.3s; font-family: 'Noto Sans JP', sans-serif; position: relative; z-index: 10; animation: breathe 3s infinite ease-in-out; box-shadow: 0 15px 25px rgba(0,0,0,0.6); }
+        
+        @keyframes breathe { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-10px) scale(1.03); } }
+        .hit-shake { animation: hitShake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes hitShake { 10%, 90% { transform: translate3d(-4px, 0, 0); } 20%, 80% { transform: translate3d(6px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-8px, 0, 0); } 40%, 60% { transform: translate3d(8px, 0, 0); } }
+
+        .enemy-hp-container { margin: 10px auto 0; width: 80%; max-width: 250px; text-align: center; position: relative; z-index: 10; background: rgba(0,0,0,0.7); padding: 8px; border-radius: 10px; border: 1px solid #444; }
+        .enemy-hp-bar-bg { width: 100%; height: 16px; background: #222; border-radius: 10px; overflow: hidden; border: 2px solid #111; position: relative; box-shadow: inset 0 2px 5px rgba(0,0,0,0.8); }
+        .enemy-hp-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2ecc71, #27ae60); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s; }
+        .enemy-hp-text { position: absolute; width: 100%; top: 0; left: 0; text-align: center; font-size: 11px; font-weight: 900; line-height: 16px; color: white; text-shadow: 1px 1px 2px black; pointer-events: none; }
+
+        .dmg-text { position: absolute; font-weight: 900; font-size: 24px; z-index: 100; pointer-events: none; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 4px 10px rgba(0,0,0,0.8); animation: floatDmg 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; }
+        @keyframes floatDmg { 0% { opacity: 1; transform: translateY(0) scale(0.5); } 20% { transform: translateY(-30px) scale(1.3); } 100% { opacity: 0; transform: translateY(-70px) scale(1); } }
+        
+        .attack-slash { position: absolute; background: white; z-index: 20; pointer-events: none; border-radius: 50%; filter: blur(2px); animation: slashAnim 0.3s ease-out forwards; }
+        @keyframes slashAnim { 0% { width: 0px; height: 4px; opacity: 1; } 50% { width: 250px; height: 8px; opacity: 1; } 100% { width: 300px; height: 0px; opacity: 0; } }
+
+        .player-input-area { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        /* Bloqueia autocorretores que estragariam o Romaji */
+        input[type="text"] { padding: 14px; font-size: 16px; border-radius: 8px; border: 2px solid #555; background: #111; color: #fff; width: 60%; text-align: center; outline: none; transition: border-color 0.3s; }
+        input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 10px rgba(233, 69, 96, 0.5); }
+        
+        .card-count { position: absolute; top: 4px; right: 4px; background: var(--primary); color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; line-height: 20px; font-weight: bold;}
+        .log-box { height: 90px; background: rgba(0,0,0,0.8); border: 2px solid #444; overflow-y: auto; padding: 10px; text-align: left; font-size: 13px; margin-top: 15px; border-radius: 8px; color: #ddd; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);}
+        .medal { font-size: 10px; padding: 2px 5px; border-radius: 3px; font-weight: bold; margin-top: 3px; display: inline-block; }
+        .m-bronze { background: var(--bronze); color: #fff; } .m-silver { background: var(--silver); color: #000; } .m-gold { background: var(--gold); color: #000; box-shadow: 0 0 5px var(--gold); }
+        .close-modal { position: absolute; top: -50px; right: 10px; color: #fff; font-size: 45px; cursor: pointer; font-weight: bold; z-index: 999999; text-shadow: 0 4px 15px rgba(0,0,0,1); }
+
+        /* --- EFEITOS PREMIUM LENDÁRIA (KANJIDEX) --- */
+        .modal-lr-aura {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 130vw; height: 130vw; max-width: 500px; max-height: 500px;
+            background: radial-gradient(circle, rgba(255,0,255,0.15) 0%, rgba(0,255,255,0.1) 30%, transparent 70%);
+            pointer-events: none; z-index: 0;
+            animation: pulseAura 3s infinite alternate ease-in-out;
+        }
+        @keyframes pulseAura { 0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0.5; } 100% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; } }
+
+        .modal-spark {
+            position: absolute; width: 4px; height: 4px; border-radius: 50%;
+            pointer-events: none; z-index: 1; opacity: 0;
+            animation: floatSpark linear infinite;
+            will-change: transform, opacity; /* <-- O Segredo que tira o peso da RAM e joga pra Placa de Vídeo */
+        }
+        @keyframes floatSpark {
+            0% { transform: translateY(20px) scale(0.5); opacity: 0; }
+            20% { opacity: 0.8; }
+            80% { opacity: 0.8; }
+            100% { transform: translateY(-120px) scale(1.2); opacity: 0; }
+        }
+
+        /* Elevador para a carta levitar sem quebrar o 3D do mouse */
+        .levitate-wrapper { display: flex; justify-content: center; align-items: center; transform-style: preserve-3d; z-index: 10; position: relative; }
+        .levitate-anim { animation: levitateAnim 4s infinite ease-in-out; }
+        @keyframes levitateAnim { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+        /* --- ADAPTAÇÃO TOTAL PARA MOBILE (SMARTPHONES) --- */
+        @media (max-width: 600px) {
+            #game-wrapper { padding: 12px; border-width: 2px; }
+            .hud { justify-content: center; font-size: 12px; gap: 5px; padding: 8px;}
+            .bar-container { width: 70px; }
+            
+            #screen-main button { width: 100%; margin: 6px 0; padding: 16px; font-size: 16px; display: block; box-sizing: border-box;}
+            #screen-main br { display: none; }
+            
+            .gacha-container { gap: 10px; margin-top: 30px; }
+            .gacha-card-wrapper { width: 95px; height: 135px; } 
+            .card-back { font-size: 40px; }
+            .card-front > div:first-child { font-size: 45px !important; }
+            .card-front > div:last-child { font-size: 11px !important; }
+            
+            .enemy-sprite { width: 120px; height: 120px; line-height: 120px; font-size: 70px; margin: 20px auto 10px; }
+            .battle-arena { padding: 15px 10px; min-height: 180px;}
+            
+            .player-input-area { flex-direction: column; width: 100%; }
+            input[type="text"] { width: 100%; padding: 15px; font-size: 18px; box-sizing: border-box; } 
+            .player-input-area button { width: 100%; padding: 15px; margin: 0; }
+            
+            #screen-battle > div > button { padding: 12px 10px; font-size: 13px; margin: 4px 2px; }
+            
+            .kanji-overlay { font-size: 90px; }
+
+            /* Ajuste do Modal Corrigido (Sem cortes na carta) */
+            .modal { align-items: flex-start; padding-top: 50px; padding-bottom: 30px; overflow-y: auto; }
+            .card-image-wrapper { width: auto; max-width: 90vw; } /* Libera a largura para acompanhar a altura */
+            .card-border-clip { min-height: auto; width: auto; }
+            .modal-card-img { width: auto; max-height: 48vh; object-fit: contain; } /* Mantém a proporção exata sem dar zoom */
+            .close-modal { top: -45px; right: 0px; font-size: 45px; }
+
+            /* Controles Pokedex no Celular */
+            .pokedex-controls { flex-direction: column; }
+            .pokedex-controls input, .pokedex-controls select { width: 100%; box-sizing: border-box; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="booster-overlay" id="booster-overlay">
+    <div class="energy"></div>
+    <div class="booster-pack" id="booster-pack">
+        <div style="font-size: 12px; color: #fff; font-weight: normal; margin-bottom: 5px; text-shadow: none;">Série N5</div>
+        KANJIMON
+    </div>
+    <div class="click-to-open" id="booster-hint">👇 TOQUE PARA RASGAR 👇</div>
+</div>
+<div class="flash" id="flash"></div>
+
+<div id="game-wrapper">
+    <img src="https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/KanjiMon.webp" alt="KanjiMon" class="logo-kanjimon">
+    <div class="hud">
+        <div>Nvl <span id="ui-level" style="color:var(--gold)">1</span></div>
+        <div>HP: <div class="bar-container"><div class="hp-bar" id="ui-hp"></div></div> <span id="ui-hp-text">100/100</span></div>
+        <div>XP: <div class="bar-container"><div class="xp-bar" id="ui-xp"></div></div></div>
+        <div>💰 <span id="ui-gold" style="color:var(--gold)">0</span></div>
+        <div>🧪 <span id="ui-potions" style="color:var(--success)">3</span></div>
+        <div>Cartas: <span id="ui-dex-count">0</span></div>
+    </div>
+
+    <div id="screen-main" class="screen active">
+        
+        <div class="menu-panel">
+            <div class="menu-panel-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>⚔️ EXPLORAÇÃO & COMBATE</span>
+            <span id="ui-unlocked-pool" style="color: var(--gold); text-transform: none; font-size: 11px; letter-spacing: 0; text-shadow: 0 0 5px rgba(241,196,15,0.4);"></span>
+            </div>
+            <div class="menu-btn-grid">
+                <button class="btn-nintendo btn-hunt" onclick="iniciarBatalha(false)">
+                    <div class="btn-bg-hunt"></div>
+                    <span class="btn-icon" style="z-index: 2; position:relative;">🌿</span>
+                    <div class="btn-text" style="z-index: 2; position:relative;">
+                        <strong>Caçada Contínua</strong>
+                        <span>Treino Livre e Ouro</span>
+                    </div>
+                </button>
+                
+                <button class="btn-nintendo btn-gym" onclick="iniciarBatalha(true)">
+                    <div class="btn-bg-boss"></div>
+                    <span class="btn-icon" style="z-index: 2; position:relative;">⛩️</span>
+                    <div class="btn-text" style="z-index: 2; position:relative;">
+                        <strong>Ginásio Kanjimon</strong>
+                        <span>Desafio do Líder</span>
+                    </div>
+                </button>
+            </div>
+            <div class="menu-panel">
+            <div class="menu-panel-title">🛒 ACAMPAMENTO E SUPRIMENTOS</div>
+            
+            <button id="btn-install" class="btn-nintendo" style="display: none; background: linear-gradient(135deg, #e67e22, #d35400); box-shadow: 0 6px 0 #a04000; margin: 0 auto 15px auto; max-width: 450px;">
+                <span class="btn-icon">📱</span>
+                <div class="btn-text">
+                    <strong>Instalar KanjiMon</strong>
+                    <span>Baixar app para a Tela Inicial</span>
+                </div>
+            </button>
+
+            <button class="btn-nintendo btn-booster" onclick="abrirBooster()">
+        </div>
+
+        <div class="menu-panel">
+            <div class="menu-panel-title">🛒 ACAMPAMENTO E SUPRIMENTOS</div>
+            <button class="btn-nintendo btn-booster" onclick="abrirBooster()">
+                ✨ Abrir Booster (150💰)
+            </button>
+            <div class="menu-btn-grid">
+                <button class="btn-nintendo btn-heal" onclick="curarNaBase()">🏥 Curar (50💰)</button>
+                <button class="btn-nintendo btn-potion" onclick="comprarPocao()">🧪 Comprar Poção (30💰)</button>
+            </div>
+        </div>
+
+        <div class="menu-panel">
+            <div class="menu-panel-title">📖 REGISTROS DA JORNADA</div>
+            <button class="btn-nintendo btn-pokedex" onclick="abrirPokedex()">
+                <span class="btn-icon">📖</span>
+                <div class="btn-text">
+                    <strong>Abrir KanjiDex</strong>
+                    <span>Ver Coleção e Maestria</span>
+                </div>
+            </button>
+        </div>
+        
+    </div>
+
+    <div id="screen-gacha" class="screen">
+        <h2 style="color:var(--gold); text-shadow: 0 0 10px var(--gold); margin-bottom: 5px;">✨ Puxando Cartas ✨</h2>
+        <p style="margin-top: 0; font-size: 13px;">Toque nas cartas para revelar!</p>
+        <div id="gacha-cards-container" class="gacha-container"></div>
+        <br><br>
+        <button id="gacha-btn-voltar" onclick="trocarTela('screen-main')" style="display:none; background:var(--primary); font-size: 16px; padding: 15px 30px; width: 80%;">Recolher Cartas</button>
+    </div>
+
+    <div id="screen-battle" class="screen">
+        <h2 id="battle-title" style="margin-top:0; margin-bottom: 10px; color:var(--gold); text-shadow: 0 2px 4px #000; font-size: 20px;">Batalha!</h2>
+        
+        <div class="battle-arena" id="battle-arena">
+            <div class="arena-flash-red" id="arena-flash"></div>
+            
+            <div style="display:flex; justify-content: space-between; position: absolute; width: 90%; top: 10px; left: 5%; z-index: 10;">
+                <span id="enemy-rarity-text" class="rarity-tag" style="background: rgba(0,0,0,0.8); padding: 4px 8px; border-radius: 5px; border: 1px solid; font-size: 12px;">Comum</span>
+                <span id="combo-text" style="color:var(--gold); font-weight:bold; font-size:14px; display:none; background:rgba(0,0,0,0.7); padding: 4px 8px; border-radius:5px;">Combo x2</span>
+            </div>
+
+            <div id="enemy-sprite" class="enemy-sprite">?</div>
+            
+            <div class="enemy-hp-container">
+                <div style="font-weight: bold; color: #fff; margin-bottom:2px; font-size: 12px;">Vitalidade do Kanji</div>
+                <div class="enemy-hp-bar-bg">
+                    <div class="enemy-hp-bar-fill" id="enemy-hp-fill"></div>
+                    <div class="enemy-hp-text" id="enemy-hp-text">100%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="player-input-area">
+            <input type="text" id="player-input" placeholder="Significado ou Romaji..." autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" onkeydown="if(event.key === 'Enter') processarAtaque()">
+            <button onclick="processarAtaque()" style="background:var(--primary);">Lançar Selo ⚡</button>
+        </div>
+        
+        <div style="display: flex; justify-content: center; flex-wrap: wrap;">
+            <button onclick="analisarInimigo()" style="background:#3498db; flex: 1; min-width: 30%;">🔍 Inspecionar (-HP)</button>
+            <button onclick="usarPocao()" style="background:var(--success); flex: 1; min-width: 30%;">Usar 🧪</button>
+            <button onclick="fugir()" id="btn-fugir" style="background:#555; flex: 1; min-width: 30%;">Fugir 🏃</button>
+        </div>
+        
+        <div class="log-box" id="battle-log"></div>
+    </div>
+
+    <div id="screen-pokedex" class="screen">
+        <div class="pokedex-header">
+            <h2 style="margin: 0; font-size: 18px;">Sua Coleção</h2>
+            <button onclick="trocarTela('screen-main')" style="background: var(--primary); margin: 0; padding: 10px;">⬅ Voltar</button>
+        </div>
+        
+        <div class="pokedex-controls">
+            <input type="text" id="dex-search" placeholder="🔍 Buscar kanji, romaji ou tradução..." autocomplete="off" oninput="atualizarFiltrosPokedex()">
+            
+            <select id="dex-filter" onchange="atualizarFiltrosPokedex()">
+                <option value="todos">👁️ Todas as Cartas</option>
+                <option value="obtidos">✅ Só Obtidas</option>
+                <option value="faltantes">❌ Só Faltantes</option>
+            </select>
+            
+            <select id="dex-sort" onchange="atualizarFiltrosPokedex()">
+                <option value="padrao">🔢 Ordem Padrão (ID)</option>
+                <option value="maestria_asc">📉 Menor Maestria (Estudo)</option>
+                <option value="maestria_desc">🏆 Maior Maestria (Orgulho)</option>
+            </select>
+        </div>
+
+        <div id="pokedex-container" class="pokedex-grid"></div>
+        <br>
+        <button onclick="window.scrollTo(0,0)" style="opacity: 0.5; font-size: 12px; width: 100%;">Voltar ao Topo</button>
+    </div>
+</div>
+
+<div id="card-modal" class="modal" onclick="fecharModal(event)">
+    <div class="modal-content">
+        <span class="close-modal" onclick="fecharModal()">&times;</span>
+        <div id="modal-image-container"></div>
+        <div style="margin-top: 20px; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 8px; color: #fff; text-align: left; z-index: 100; width: 85vw; max-width: 380px; box-sizing: border-box;">
+            <div id="modal-details-title" style="font-size:20px; font-weight:bold; margin-bottom:5px;"></div>
+            <div id="modal-details-rarity"></div>
+            <div id="modal-details-sig" style="color:#aaa; font-size:14px; margin-top: 5px;"></div>
+            <div id="modal-details-vocab" style="color:#3498db; font-size:14px; margin-top:8px; font-weight:bold;"></div>
+            <div id="modal-details-mastery" style="color:var(--gold); font-size:13px; margin-top:8px;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="rpg-dialog" class="rpg-dialog-overlay" onclick="avancarDialogo()">
+    <div class="rpg-dialog-box">
+        <div id="rpg-dialog-text"></div>
+        <div class="rpg-dialog-arrow">▼</div>
+    </div>
+</div>
+
+<div id="modal-levelup" class="modal" style="z-index: 10005;">
+    <div class="menu-panel" style="max-width: 400px; text-align: center; background: rgba(20,20,30,0.98); border: 2px solid var(--gold); padding: 25px;">
+        <h2 style="color: var(--gold); margin-top: 0; font-size: 22px; text-shadow: 0 0 10px rgba(241,196,15,0.5);">🌟 PRONTO PARA EVOLUIR? 🌟</h2>
+        <p id="lvl-modal-text" style="font-size: 15px; line-height: 1.5; color: #fff;">
+            Você dominou a região atual!<br>
+            Avançar para o Nível <b id="lvl-next" style="color:var(--gold);"></b> vai liberar novos desafios.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 25px;">
+            <button id="btn-lvl-yes" style="background: var(--success); font-size: 16px; box-shadow: 0 4px 0 #1e8449; text-transform: none;">
+                ✔️ Sim, avançar para o Nível <span id="lvl-next-btn"></span>
+            </button>
+            <button id="btn-lvl-no" style="background: #e74c3c; font-size: 14px; box-shadow: 0 4px 0 #c0392b; text-transform: none;">
+                ❌ Não, recuar para o Nível <span id="lvl-prev"></span><br>
+                <span style="font-size:11px; font-weight:normal;">(Reforçar a base de Kanji atual)</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // CONFIGURAÇÃO DE IMAGENS REMOTAS
+    // ==========================================
+    // O sistema vai somar esse link com "ID_RARIDADE.png".
+    const URL_IMAGENS = "https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/"; 
+    // ==========================================
+
+    // ==========================================
+    // TRAVA DE SCROLL NATIVO DO NAVEGADOR
+    // ==========================================
+    if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+    }
+
+    const DATABASE = [
+        { id: 1, kanji: '一', romaji: ['ichi', 'hito', 'itsu'], sig: ['um', '1'], vocab: ['<em>一日</em> (<em>tsuitachi</em> - 1º dia do mês)', '<b>一</b>人 (<b>hito</b>ri - 1 pessoa)', '<b>一</b>緒に (<b>is</b>sho ni - juntos)', '<span style="color:#bdc3c7;">💬 Frase: <b>一</b>人で行きます。(<b>hito</b>ri de ikimasu - Vou sozinho.)</span>'], hpBase: 20, atk: 3 },
+        { id: 2, kanji: '二', romaji: ['ni', 'futa'], sig: ['dois', '2'], vocab: ['<b>二</b>日 (<b>futsu</b>ka - dia 2)', '<b>二</b>人 (<b>futa</b>ri - 2 pessoas)', '<b>二</b>つ (<b>futa</b>tsu - duas coisas)', '<span style="color:#bdc3c7;">💬 Frase: <b>二</b>つください。(<b>futa</b>tsu kudasai - Me dê dois, por favor.)</span>'], hpBase: 20, atk: 3 },
+        { id: 3, kanji: '三', romaji: ['san', 'mi'], sig: ['tres', '3'], vocab: ['<b>三</b>日 (<b>mik</b>ka - dia 3)', '<b>三</b>人 (<b>san</b>nin - 3 pessoas)', '<b>三</b>月 (<b>san</b>gatsu - março)', '<span style="color:#bdc3c7;">💬 Frase: <b>三</b>人家族です。(<b>san</b>nin kazoku desu - Somos uma família de três.)</span>'], hpBase: 25, atk: 4 },
+        { id: 4, kanji: '四', romaji: ['shi', 'yon', 'yo'], sig: ['quatro', '4'], vocab: ['<b>四</b>月 (<b>shi</b>gatsu - abril)', '<b>四</b>人 (<b>yo</b>nin - 4 pessoas)', '<b>四</b>つ (<b>yot</b>tsu - quatro coisas)', '<span style="color:#bdc3c7;">💬 Frase: <b>四</b>時に会いましょう。(<b>yo</b>ji ni aimashou - Vamos nos encontrar às quatro horas.)</span>'], hpBase: 25, atk: 4 },
+        { id: 5, kanji: '五', romaji: ['go', 'itsu'], sig: ['cinco', '5'], vocab: ['<b>五</b>日 (<b>itsu</b>ka - dia 5)', '<b>五</b>円 (<b>go</b>en - moeda de 5 ienes)', '<b>五</b>つ (<b>itsu</b>tsu - cinco coisas)', '<span style="color:#bdc3c7;">💬 Frase: <b>五</b>分待ってください。(<b>go</b>fun matte kudasai - Espere cinco minutos.)</span>'], hpBase: 25, atk: 4 },
+        { id: 6, kanji: '六', romaji: ['roku', 'mu'], sig: ['seis', '6'], vocab: ['<b>六</b>日 (<b>mui</b>ka - dia 6)', '<b>六</b>百 (<b>rop</b>pyaku - 600)', '<b>六</b>つ (<b>mut</b>tsu - seis coisas)', '<span style="color:#bdc3c7;">💬 Frase: 毎日<b>六</b>時に起きます。(mainichi <b>roku</b>ji ni okimasu - Acordo às seis todos os dias.)</span>'], hpBase: 25, atk: 4 },
+        { id: 7, kanji: '七', romaji: ['shichi', 'nana'], sig: ['sete', '7'], vocab: ['<b>七</b>日 (<b>nano</b>ka - dia 7)', '<b>七</b>時 (<b>shichi</b>ji - 7 horas)', '<b>七</b>つ (<b>nana</b>tsu - sete coisas)', '<span style="color:#bdc3c7;">💬 Frase: <b>七</b>月に行きます。(<b>shichi</b>gatsu ni ikimasu - Vou em julho.)</span>'], hpBase: 25, atk: 5 },
+        { id: 8, kanji: '八', romaji: ['hachi', 'ya'], sig: ['oito', '8'], vocab: ['<b>八</b>日 (<b>you</b>ka - dia 8)', '<em>八百屋</em> (<em>yaoya</em> - quitanda)', '<b>八</b>つ (<b>yat</b>tsu - oito coisas)', '<span style="color:#bdc3c7;">💬 Frase: <b>八</b>時に始まります。(<b>hachi</b>ji ni hajimarimasu - Começa às oito horas.)</span>'], hpBase: 25, atk: 5 },
+        { id: 9, kanji: '九', romaji: ['kyuu', 'ku', 'kokono'], sig: ['nove', '9'], vocab: ['<b>九</b>月 (<b>ku</b>gatsu - setembro)', '<b>九</b>州 (<b>kyuu</b>shuu - região de Kyushu)', '<b>九</b>つ (<b>kokono</b>tsu - nove coisas)', '<span style="color:#bdc3c7;">💬 Frase: 妹は<b>九</b>歳です。(imouto wa <b>kyuu</b>sai desu - Minha irmã mais nova tem nove anos.)</span>'], hpBase: 30, atk: 5 },
+        { id: 10, kanji: '十', romaji: ['juu', 'tou', 'ji'], sig: ['dez', '10'], vocab: ['<b>十</b>日 (<b>too</b>ka - dia 10)', '<b>十</b>分 (<b>juu</b>bun - suficiente)', '<b>十</b>字路 (<b>juu</b>jiro - cruzamento)', '<span style="color:#bdc3c7;">💬 Frase: <b>十</b>分な時間があります。(<b>juu</b>bun na jikan ga arimasu - Temos tempo suficiente.)</span>'], hpBase: 30, atk: 5 },
+        { id: 11, kanji: '百', romaji: ['hyaku', 'byaku', 'pyaku'], sig: ['cem', '100'], vocab: ['<b>百</b>円 (<b>hyaku</b>en - 100 ienes)', '三<b>百</b> (san<b>byaku</b> - 300)', '<b>百</b>貨店 (<b>hyaku</b>katen - loja de departamento)', '<span style="color:#bdc3c7;">💬 Frase: これは<b>百</b>円です。(kore wa <b>hyaku</b>en desu - Isto custa cem ienes.)</span>'], hpBase: 35, atk: 6 },
+        { id: 12, kanji: '千', romaji: ['sen', 'chi', 'zen'], sig: ['mil', '1000'], vocab: ['<b>千</b>円 (<b>sen</b>\'en - 1000 ienes)', '<b>千</b>葉 (<b>chi</b>ba - província de Chiba)', '三<b>千</b> (san<b>zen</b> - 3000)', '<span style="color:#bdc3c7;">💬 Frase: <b>千</b>円札ありますか？ (<b>sen</b>\'ensatsu arimasu ka? - Tem uma nota de mil ienes?)</span>'], hpBase: 40, atk: 7 },
+        { id: 13, kanji: '万', romaji: ['man', 'ban'], sig: ['dez mil', '10000'], vocab: ['一<b>万</b>円 (ichi<b>man</b>\'en - 10.000 ienes)', '<b>万</b>歳 (<b>ban</b>zai - viva!)', '<b>万</b>一 (<b>man</b>\'ichi - emergência/por acaso)', '<span style="color:#bdc3c7;">💬 Frase: 一<b>万</b>円かかります。(ichi<b>man</b>\'en kakarimasu - Custa dez mil ienes.)</span>'], hpBase: 50, atk: 8 },
+        { id: 14, kanji: '円', romaji: ['en', 'maru'], sig: ['iene', 'circulo', 'dinheiro'], vocab: ['百<b>円</b> (hyaku<b>en</b> - 100 ienes)', '<b>円</b>い (<b>maru</b>i - redondo)', '<b>円</b>安 (<b>en</b>yasu - iene fraco)', '<span style="color:#bdc3c7;">💬 Frase: 千<b>円</b>を払いました。(sen<b>en</b> o haraimashita - Paguei mil ienes.)</span>'], hpBase: 45, atk: 7 },
+        { id: 15, kanji: '日', romaji: ['nichi', 'jitsu', 'hi', 'bi', 'ka'], sig: ['sol', 'dia'], vocab: ['<b>日</b>本 (<b>ni</b>hon - Japão)', '<em>今日</em> (<em>kyou</em> - hoje)', '<b>日</b>曜<b>日</b> (<b>nichi</b>you<b>bi</b> - domingo)', '<span style="color:#bdc3c7;">💬 Frase: <b>日</b>本へようこそ。(<b>ni</b>hon e youkoso - Bem-vindo ao Japão.)</span>'], hpBase: 35, atk: 6 },
+        { id: 16, kanji: '月', romaji: ['getsu', 'gatsu', 'tsuki'], sig: ['lua', 'mes'], vocab: ['<b>月</b>曜日 (<b>getsu</b>youbi - 2ª feira)', '今<b>月</b> (kon<b>getsu</b> - este mês)', '一ヶ<b>月</b> (ikka<b>getsu</b> - um mês)', '<span style="color:#bdc3c7;">💬 Frase: <b>月</b>が綺麗ですね。(<b>tsuki</b> ga kirei desu ne - A lua está linda, não é?)</span>'], hpBase: 35, atk: 6 },
+        { id: 17, kanji: '火', romaji: ['ka', 'hi', 'bi'], sig: ['fogo'], vocab: ['<b>火</b>曜日 (<b>ka</b>youbi - 3ª feira)', '花<b>火</b> (hana<b>bi</b> - fogos de artifício)', '<b>火</b>事 (<b>ka</b>ji - incêndio)', '<span style="color:#bdc3c7;">💬 Frase: <b>火</b>を消して。(<b>hi</b> o keshite - Apague o fogo.)</span>'], hpBase: 35, atk: 7 },
+        { id: 18, kanji: '水', romaji: ['sui', 'mizu'], sig: ['agua'], vocab: ['<b>水</b>曜日 (<b>sui</b>youbi - 4ª feira)', 'お<b>水</b> (o<b>mizu</b> - água)', '<b>水</b>道 (<b>sui</b>dou - encanamento)', '<span style="color:#bdc3c7;">💬 Frase: お<b>水</b>を一杯ください。(o<b>mizu</b> o ippai kudasai - Um copo de água, por favor.)</span>'], hpBase: 35, atk: 5 },
+        { id: 19, kanji: '木', romaji: ['moku', 'boku', 'ki'], sig: ['arvore', 'madeira'], vocab: ['<b>木</b>曜日 (<b>moku</b>youbi - 5ª feira)', '<b>木</b>村 (<b>ki</b>mura - sobrenome)', '<b>木</b>造 (<b>moku</b>zou - de madeira)', '<span style="color:#bdc3c7;">💬 Frase: あの<b>木</b>は大きいです。(ano <b>ki</b> wa ookii desu - Aquela árvore é grande.)</span>'], hpBase: 40, atk: 4 },
+        { id: 20, kanji: '金', romaji: ['kin', 'kon', 'kane'], sig: ['ouro', 'dinheiro', 'metal'], vocab: ['<b>金</b>曜日 (<b>kin</b>\'youbi - 6ª feira)', 'お<b>金</b> (o<b>kane</b> - dinheiro)', '現<b>金</b> (gen<b>kin</b> - dinheiro vivo)', '<span style="color:#bdc3c7;">💬 Frase: お<b>金</b>がありません。(o<b>kane</b> ga arimasen - Não tenho dinheiro.)</span>'], hpBase: 50, atk: 8 },
+        { id: 21, kanji: '土', romaji: ['do', 'to', 'tsuchi'], sig: ['terra', 'solo'], vocab: ['<b>土</b>曜日 (<b>do</b>youbi - sábado)', 'お<em>土産</em> (o<em>miyage</em> - lembrancinha)', '<b>土</b>地 (<b>to</b>chi - terreno)', '<span style="color:#bdc3c7;">💬 Frase: <b>土</b>曜日が休みです。(<b>do</b>youbi ga yasumi desu - Sábado é minha folga.)</span>'], hpBase: 45, atk: 6 },
+        { id: 22, kanji: '山', romaji: ['san', 'yama', 'zan'], sig: ['montanha'], vocab: ['富士<b>山</b> (fuji<b>san</b> - Monte Fuji)', '<b>山</b>田 (<b>yama</b>da - sobrenome)', '火<b>山</b> (ka<b>zan</b> - vulcão)', '<span style="color:#bdc3c7;">💬 Frase: <b>山</b>に登ります。(<b>yama</b> ni noborimasu - Vou escalar a montanha.)</span>'], hpBase: 45, atk: 6 },
+        { id: 23, kanji: '川', romaji: ['sen', 'kawa', 'gawa'], sig: ['rio'], vocab: ['<b>川</b>口 (<b>kawa</b>guchi - sobrenome)', '天の<b>川</b> (amano<b>gawa</b> - via láctea)', '河<b>川</b> (ka<b>sen</b> - rios)', '<span style="color:#bdc3c7;">💬 Frase: <b>川</b>で泳ぎます。(<b>kawa</b> de oyogimasu - Vou nadar no rio.)</span>'], hpBase: 35, atk: 5 },
+        { id: 24, kanji: '天', romaji: ['ten', 'ama'], sig: ['ceu', 'paraiso'], vocab: ['<b>天</b>気 (<b>ten</b>ki - tempo)', '<b>天</b>ぷら (<b>ten</b>pura - tempurá)', '<b>天</b>国 (<b>ten</b>goku - paraíso)', '<span style="color:#bdc3c7;">💬 Frase: 今日は<b>天</b>気がいいです。(kyou wa <b>ten</b>ki ga ii desu - O tempo está bom hoje.)</span>'], hpBase: 55, atk: 9 },
+        { id: 25, kanji: '空', romaji: ['kuu', 'sora', 'a', 'kara'], sig: ['ceu', 'vazio'], vocab: ['<b>空</b>気 (<b>kuu</b>ki - ar)', '<b>空</b>港 (<b>kuu</b>kou - aeroporto)', '<b>空</b>いている (<b>a</b>iteiru - estar vazio/livre)', '<span style="color:#bdc3c7;">💬 Frase: <b>空</b>が青いです。(<b>sora</b> ga aoi desu - O céu está azul.)</span>'], hpBase: 50, atk: 8 },
+        { id: 26, kanji: '雨', romaji: ['u', 'ame', 'ama'], sig: ['chuva'], vocab: ['大<b>雨</b> (oo<b>ame</b> - chuva forte)', '<b>雨</b>水 (<b>ama</b>mizu - água da chuva)', '<em>梅雨</em> (<em>tsuyu</em> - época de chuvas)', '<span style="color:#bdc3c7;">💬 Frase: <b>雨</b>が降っています。(<b>ame</b> ga futte imasu - Está chovendo.)</span>'], hpBase: 40, atk: 6 },
+        { id: 27, kanji: '花', romaji: ['ka', 'hana', 'bana'], sig: ['flor'], vocab: ['<b>花</b>見 (<b>hana</b>mi - ver cerejeiras)', '<b>花</b>火 (<b>hana</b>bi - fogos de artifício)', '生け<b>花</b> (ike<b>bana</b> - arranjo floral)', '<span style="color:#bdc3c7;">💬 Frase: 綺麗な<b>花</b>ですね。(kirei na <b>hana</b> desu ne - Que flor bonita, né?)</span>'], hpBase: 35, atk: 5 },
+        { id: 28, kanji: '人', romaji: ['jin', 'nin', 'hito'], sig: ['pessoa', 'humano'], vocab: ['日本<b>人</b> (nihon<b>jin</b> - japonês)', 'あの<b>人</b> (ano <b>hito</b> - aquela pessoa)', '<b>人</b>気 (<b>nin</b>ki - popularidade)', '<span style="color:#bdc3c7;">💬 Frase: 彼はいい<b>人</b>です。(kare wa ii <b>hito</b> desu - Ele é uma boa pessoa.)</span>'], hpBase: 40, atk: 5 },
+        { id: 29, kanji: '男', romaji: ['dan', 'nan', 'otoko'], sig: ['homem', 'masculino'], vocab: ['<b>男</b>の子 (<b>otoko</b>noko - menino)', '<b>男</b>性 (<b>dan</b>sei - sexo masculino)', '長<b>男</b> (chou<b>nan</b> - filho mais velho)', '<span style="color:#bdc3c7;">💬 Frase: あの<b>男</b>の人は誰ですか？ (ano <b>otoko</b> no hito wa dare desu ka? - Quem é aquele homem?)</span>'], hpBase: 45, atk: 6 },
+        { id: 30, kanji: '女', romaji: ['jo', 'nyo', 'onna'], sig: ['mulher', 'feminino'], vocab: ['<b>女</b>の子 (<b>onna</b>noko - menina)', '<b>女</b>性 (<b>jo</b>sei - sexo feminino)', '彼<b>女</b> (kano<b>jo</b> - namorada/ela)', '<span style="color:#bdc3c7;">💬 Frase: <b>女</b>の人がいます。(<b>onna</b> no hito ga imasu - Tem uma mulher ali.)</span>'], hpBase: 45, atk: 6 },
+        { id: 31, kanji: '子', romaji: ['shi', 'su', 'ko'], sig: ['crianca', 'filho'], vocab: ['<b>子</b>供 (<b>ko</b>domo - criança)', 'お菓<b>子</b> (oka<b>shi</b> - doces/snacks)', '帽<b>子</b> (bou<b>shi</b> - chapéu)', '<span style="color:#bdc3c7;">💬 Frase: <b>子</b>供が遊んでいます。(<b>kodomo</b> ga asonde imasu - A criança está brincando.)</span>'], hpBase: 30, atk: 4 },
+        { id: 32, kanji: '目', romaji: ['moku', 'boku', 'me'], sig: ['olho'], vocab: ['<b>目</b>薬 (<b>me</b>gusuri - colírio)', '<b>目</b>的 (<b>moku</b>teki - objetivo)', '駄<b>目</b> (da<b>me</b> - proibido/não pode)', '<span style="color:#bdc3c7;">💬 Frase: <b>目</b>が痛いです。(<b>me</b> ga itai desu - Meu olho dói.)</span>'], hpBase: 30, atk: 4 },
+        { id: 33, kanji: '口', romaji: ['kou', 'ku', 'kuchi', 'guchi'], sig: ['boca'], vocab: ['出<b>口</b> (de<b>guchi</b> - saída)', '入<b>口</b> (iri<b>guchi</b> - entrada)', '人<b>口</b> (jin<b>kou</b> - população)', '<span style="color:#bdc3c7;">💬 Frase: 大きく<b>口</b>を開けて。(ookiku <b>kuchi</b> o akete - Abra bem a boca.)</span>'], hpBase: 30, atk: 4 },
+        { id: 34, kanji: '耳', romaji: ['ji', 'mimi'], sig: ['orelha'], vocab: ['<b>耳</b>鼻科 (<b>ji</b>bika - otorrino)', '初<b>耳</b> (hatsu<b>mimi</b> - ouvir pela 1ª vez)', '<b>耳</b>栓 (<b>mimi</b>sen - tampão de ouvido)', '<span style="color:#bdc3c7;">💬 Frase: <b>耳</b>が遠いです。(<b>mimi</b> ga tooi desu - Tenho a audição ruim/sou duro de ouvido.)</span>'], hpBase: 30, atk: 4 },
+        { id: 35, kanji: '手', romaji: ['shu', 'te'], sig: ['mao'], vocab: ['お<b>手</b>洗い (o<b>te</b>arai - banheiro/lavabos)', '切<b>手</b> (kit<b>te</b> - selo postal)', '拍<b>手</b> (haku<b>shu</b> - aplausos)', '<span style="color:#bdc3c7;">💬 Frase: <b>手</b>を洗ってください。(<b>te</b> o aratte kudasai - Lave as mãos, por favor.)</span>'], hpBase: 35, atk: 5 },
+        { id: 36, kanji: '足', romaji: ['soku', 'ashi', 'ta'], sig: ['pe', 'perna'], vocab: ['<b>足</b>首 (<b>ashi</b>kubi - tornozelo)', '不<b>足</b> (fu<b>soku</b> - falta/escassez)', '<b>足</b>りる (<b>ta</b>riru - ser suficiente)', '<span style="color:#bdc3c7;">💬 Frase: <b>足</b>が疲れました。(<b>ashi</b> ga tsukaremashita - Minhas pernas cansaram.)</span>'], hpBase: 40, atk: 6 },
+        { id: 37, kanji: '父', romaji: ['fu', 'chichi', 'tou'], sig: ['pai'], vocab: ['お<b>父</b>さん (o<b>tou</b>san - pai)', '祖<b>父</b> (so<b>fu</b> - avô)', '<b>父</b>親 (<b>chichi</b>oya - pai [formal])', '<span style="color:#bdc3c7;">💬 Frase: <b>父</b>は会社員です。(<b>chichi</b> wa kaishain desu - Meu pai é funcionário de empresa.)</span>'], hpBase: 45, atk: 6 },
+        { id: 38, kanji: '母', romaji: ['bo', 'haha', 'kaa'], sig: ['mae'], vocab: ['お<b>母</b>さん (o<b>kaa</b>san - mãe)', '祖<b>母</b> (so<b>bo</b> - avó)', '<b>母</b>親 (<b>haha</b>oya - mãe [formal])', '<span style="color:#bdc3c7;">💬 Frase: <b>母</b>は料理が上手です。(<b>haha</b> wa ryouri ga jouzu desu - Minha mãe cozinha bem.)</span>'], hpBase: 45, atk: 6 },
+        { id: 39, kanji: '上', romaji: ['jou', 'ue', 'kami', 'nobo', 'a', 'uwa'], sig: ['cima', 'acima', 'subir'], vocab: ['<b>上</b>着 (<b>uwa</b>gi - casaco/jaqueta)', '<b>上</b>手 (<b>jou</b>zu - habilidoso)', '<b>上</b>る (<b>nobo</b>ru - subir)', '<span style="color:#bdc3c7;">💬 Frase: 机の<b>上</b>にあります。(tsukue no <b>ue</b> ni arimasu - Está em cima da mesa.)</span>'], hpBase: 40, atk: 5 },
+        { id: 40, kanji: '下', romaji: ['ka', 'ge', 'shita', 'kuda', 'sa', 'o'], sig: ['baixo', 'abaixo', 'descer'], vocab: ['地<b>下</b>鉄 (chi<b>ka</b>tetsu - metrô)', '<b>下</b>着 (<b>shita</b>gi - roupa íntima)', '<b>下</b>さい (ku<b>da</b>sai - por favor)', '<span style="color:#bdc3c7;">💬 Frase: 机の<b>下</b>に猫がいます。(tsukue no <b>shita</b> ni neko ga imasu - Tem um gato debaixo da mesa.)</span>'], hpBase: 40, atk: 5 },
+        { id: 41, kanji: '左', romaji: ['sa', 'hidari'], sig: ['esquerda'], vocab: ['<b>左</b>折 (<b>sa</b>setsu - virar à esquerda)', '<b>左</b>側 (<b>hidari</b>gawa - lado esquerdo)', '<b>左</b>手 (<b>hidari</b>te - mão esquerda)', '<span style="color:#bdc3c7;">💬 Frase: <b>左</b>へ曲がってください。(<b>hidari</b> e magatte kudasai - Vire à esquerda, por favor.)</span>'], hpBase: 35, atk: 5 },
+        { id: 42, kanji: '右', romaji: ['yuu', 'uu', 'migi'], sig: ['direita'], vocab: ['<b>右</b>折 (<b>u</b>setsu - virar à direita)', '<b>右</b>手 (<b>migi</b>te - mão direita)', '左<b>右</b> (sa<b>yuu</b> - esquerda e direita)', '<span style="color:#bdc3c7;">💬 Frase: <b>右</b>を見てください。(<b>migi</b> o mite kudasai - Olhe para a direita, por favor.)</span>'], hpBase: 35, atk: 5 },
+        { id: 43, kanji: '中', romaji: ['chuu', 'naka', 'juu'], sig: ['dentro', 'meio', 'centro'], vocab: ['街<b>中</b> (machi<b>naka</b> - centro da cidade)', '<b>中</b>国 (<b>chuu</b>goku - China)', '一日<b>中</b> (ichinichi<b>juu</b> - o dia todo)', '<span style="color:#bdc3c7;">💬 Frase: かばんの<b>中</b>にあります。(kaban no <b>naka</b> ni arimasu - Está dentro da bolsa.)</span>'], hpBase: 40, atk: 5 },
+        { id: 44, kanji: '前', romaji: ['zen', 'mae'], sig: ['antes', 'frente'], vocab: ['名<b>前</b> (na<b>mae</b> - nome)', '駅<b>前</b> (eki<b>mae</b> - em frente à estação)', '午<b>前</b> (go<b>zen</b> - AM/manhã)', '<span style="color:#bdc3c7;">💬 Frase: 駅の<b>前</b>で待ちましょう。(eki no <b>mae</b> de machimashou - Vamos esperar na frente da estação.)</span>'], hpBase: 45, atk: 6 },
+        { id: 45, kanji: '後', romaji: ['go', 'kou', 'ushi', 'ato', 'nochi', 'oku'], sig: ['depois', 'atras'], vocab: ['<b>後</b>ろ (<b>ushi</b>ro - atrás)', '午<b>後</b> (go<b>go</b> - PM/tarde)', '<b>後</b>で (<b>ato</b> de - depois)', '<span style="color:#bdc3c7;">💬 Frase: <b>後</b>で電話します。(<b>ato</b> de denwa shimasu - Ligo depois.)</span>'], hpBase: 45, atk: 6 },
+        { id: 46, kanji: '外', romaji: ['gai', 'ge', 'soto', 'hoka', 'hazu'], sig: ['fora', 'exterior'], vocab: ['<b>外</b>国人 (<b>gai</b>kokujin - estrangeiro)', '海<b>外</b> (kai<b>gai</b> - exterior/países estrangeiros)', '<b>外</b>食 (<b>gai</b>shoku - comer fora)', '<span style="color:#bdc3c7;">💬 Frase: <b>外</b>は寒いです。(<b>soto</b> wa samui desu - Lá fora está frio.)</span>'], hpBase: 45, atk: 6 },
+        { id: 47, kanji: '北', romaji: ['hoku', 'kita'], sig: ['norte'], vocab: ['<b>北</b>海道 (<b>hokka</b>idou - região de Hokkaido)', '<b>北</b>口 (<b>kita</b>guchi - saída norte)', '南<b>北</b> (nan<b>boku</b> - sul e norte)', '<span style="color:#bdc3c7;">💬 Frase: 駅の<b>北</b>口に出てください。(eki no <b>kita</b>guchi ni dete kudasai - Saia pela saída norte da estação.)</span>'], hpBase: 40, atk: 5 },
+        { id: 48, kanji: '南', romaji: ['nan', 'minami'], sig: ['sul'], vocab: ['<b>南</b>口 (<b>minami</b>guchi - saída sul)', '東<b>南</b>アジア (tou<b>nan</b> ajia - sudeste asiático)', '<b>南</b>米 (<b>nan</b>bei - América do Sul)', '<span style="color:#bdc3c7;">💬 Frase: ブラジルは<b>南</b>米にあります。(burajiru wa <b>nan</b>bei ni arimasu - O Brasil fica na América do Sul.)</span>'], hpBase: 40, atk: 5 },
+        { id: 49, kanji: '東', romaji: ['tou', 'higashi'], sig: ['leste'], vocab: ['<b>東</b>京 (<b>tou</b>kyou - Tóquio)', '<b>東</b>口 (<b>higashi</b>guchi - saída leste)', '関<b>東</b> (kan<b>tou</b> - região de Kanto)', '<span style="color:#bdc3c7;">💬 Frase: 太陽は<b>東</b>から昇ります。(taiyou wa <b>higashi</b> kara noborimasu - O sol nasce no leste.)</span>'], hpBase: 40, atk: 5 },
+        { id: 50, kanji: '西', romaji: ['sei', 'sai', 'nishi'], sig: ['oeste'], vocab: ['関<b>西</b> (kan<b>sai</b> - região de Kansai)', '<b>西</b>口 (<b>nishi</b>guchi - saída oeste)', '<b>西</b>洋 (<b>sei</b>you - ocidente)', '<span style="color:#bdc3c7;">💬 Frase: <b>西</b>口で会いましょう。(<b>nishi</b>guchi de aimashou - Vamos nos ver na saída oeste.)</span>'], hpBase: 40, atk: 5 },
+        { id: 51, kanji: '年', romaji: ['nen', 'toshi'], sig: ['ano'], vocab: ['去<b>年</b> (kyo<b>nen</b> - ano passado)', '来<b>年</b> (rai<b>nen</b> - próximo ano)', 'お<b>年</b>寄り (o<b>toshi</b>yori - idoso)', '<span style="color:#bdc3c7;">💬 Frase: 来<b>年</b>日本へ行きます。(rai<b>nen</b> nihon e ikimasu - Ano que vem vou ao Japão.)</span>'], hpBase: 40, atk: 5 },
+        { id: 52, kanji: '休', romaji: ['kyuu', 'yasu'], sig: ['descanso', 'ferias', 'descansar'], vocab: ['<b>休</b>み (<b>yasu</b>mi - folga/descanso)', '定<b>休</b>日 (tei<b>kyuu</b>bi - dia de folga da loja)', '夏<b>休</b>み (natsu<b>yasu</b>mi - férias de verão)', '<span style="color:#bdc3c7;">💬 Frase: 今日は仕事が<b>休</b>みです。(kyou wa shigoto ga <b>yasu</b>mi desu - Hoje é minha folga do trabalho.)</span>'], hpBase: 45, atk: 6 },
+        { id: 53, kanji: '今', romaji: ['kon', 'kin', 'ima'], sig: ['agora'], vocab: ['<b>今</b>週 (<b>kon</b>shuu - esta semana)', '<em>今日</em> (<em>kyou</em> - hoje)', '<em>今年</em> (<em>kotoshi</em> - este ano)', '<span style="color:#bdc3c7;">💬 Frase: <b>今</b>、何時ですか？ (<b>ima</b>, nanji desu ka? - Que horas são agora?)</span>'], hpBase: 40, atk: 5 },
+        { id: 54, kanji: '週', romaji: ['shuu'], sig: ['semana'], vocab: ['<b>週</b>末 (<b>shuu</b>matsu - fim de semana)', '来<b>週</b> (rai<b>shuu</b> - próxima semana)', '毎<b>週</b> (mai<b>shuu</b> - toda semana)', '<span style="color:#bdc3c7;">💬 Frase: <b>週</b>末は映画を見ます。(<b>shuu</b>matsu wa eiga o mimasu - No fim de semana assisto filmes.)</span>'], hpBase: 45, atk: 6 },
+        { id: 55, kanji: '時', romaji: ['ji', 'toki', 'to'], sig: ['tempo', 'hora'], vocab: ['<b>時</b>間 (<b>ji</b>kan - tempo/horas)', '<b>時</b>計 (<b>to</b>kei - relógio)', '何<b>時</b> (nan<b>ji</b> - que horas?)', '<span style="color:#bdc3c7;">💬 Frase: <b>時</b>間がありません。(<b>ji</b>kan ga arimasen - Não tenho tempo.)</span>'], hpBase: 50, atk: 7 },
+        { id: 56, kanji: '間', romaji: ['kan', 'ken', 'aida', 'ma'], sig: ['intervalo', 'espaco', 'entre'], vocab: ['この<b>間</b> (kono <b>aida</b> - ultimamente/o outro dia)', '<b>間</b>に合う (<b>ma</b> ni au - chegar a tempo)', '時<b>間</b> (ji<b>kan</b> - tempo)', '<span style="color:#bdc3c7;">💬 Frase: 電車に<b>間</b>に合いました。(densha ni <b>ma</b> ni aimashita - Cheguei a tempo do trem.)</span>'], hpBase: 55, atk: 7 },
+        { id: 57, kanji: '半', romaji: ['han', 'naka'], sig: ['metade', 'meio'], vocab: ['<b>半</b>額 (<b>han</b>gaku - metade do preço)', '４時<b>半</b> (yoji<b>han</b> - 4 e meia)', '<b>半</b>分 (<b>han</b>bun - metade)', '<span style="color:#bdc3c7;">💬 Frase: ピザを<b>半</b>分食べました。(piza o <b>han</b>bun tabemashita - Comi metade da pizza.)</span>'], hpBase: 40, atk: 5 },
+        { id: 58, kanji: '大', romaji: ['dai', 'tai', 'oo'], sig: ['grande'], vocab: ['<b>大</b>丈夫 (<b>dai</b>joubu - tudo bem/sem problema)', '<em>大人</em> (<em>otona</em> - adulto)', '<b>大</b>きい (<b>oo</b>kii - grande)', '<span style="color:#bdc3c7;">💬 Frase: このシャツは<b>大</b>きいです。(kono shatsu wa <b>oo</b>kii desu - Esta camisa é grande.)</span>'], hpBase: 50, atk: 8 },
+        { id: 59, kanji: '小', romaji: ['shou', 'chii', 'ko', 'o'], sig: ['pequeno'], vocab: ['<b>小</b>学校 (<b>shou</b>gakkou - escola primária)', '<b>小</b>銭 (<b>ko</b>zeni - troco/moedas)', '<b>小</b>さい (<b>chii</b>sai - pequeno)', '<span style="color:#bdc3c7;">💬 Frase: <b>小</b>さい犬を飼っています。(<b>chii</b>sai inu o katte imasu - Crio um cachorro pequeno.)</span>'], hpBase: 30, atk: 4 },
+        { id: 60, kanji: '高', romaji: ['kou', 'taka'], sig: ['alto', 'caro'], vocab: ['<b>高</b>校生 (<b>kou</b>kousei - estudante do ensino médio)', '<b>高</b>い (<b>taka</b>i - caro/alto)', '最<b>高</b> (sai<b>kou</b> - o melhor/incrível)', '<span style="color:#bdc3c7;">💬 Frase: 日本の果物は<b>高</b>いです。(nihon no kudamono wa <b>taka</b>i desu - As frutas no Japão são caras.)</span>'], hpBase: 50, atk: 7 },
+        { id: 61, kanji: '安', romaji: ['an', 'yasu'], sig: ['barato', 'seguro', 'paz'], vocab: ['<b>安</b>い (<b>yasu</b>i - barato)', '<b>安</b>全 (<b>an</b>zen - seguro)', '不<b>安</b> (fu<b>an</b> - ansiedade)', '<span style="color:#bdc3c7;">💬 Frase: この靴はとても<b>安</b>いです。(kono kutsu wa totemo <b>yasu</b>i desu - Este sapato é muito barato.)</span>'], hpBase: 40, atk: 5 },
+        { id: 62, kanji: '新', romaji: ['shin', 'atara', 'ara', 'nii'], sig: ['novo'], vocab: ['<b>新</b>幹線 (<b>shin</b>kansen - trem bala)', '<b>新</b>宿 (<b>shin</b>juku - bairro de Tóquio)', '<b>新</b>しい (<b>atara</b>shii - novo)', '<span style="color:#bdc3c7;">💬 Frase: <b>新</b>しい車を買いました。(<b>atara</b>shii kuruma o kaimashita - Comprei um carro novo.)</span>'], hpBase: 45, atk: 6 },
+        { id: 63, kanji: '古', romaji: ['ko', 'furu'], sig: ['velho', 'antigo'], vocab: ['中<b>古</b> (chuu<b>ko</b> - usado/segunda mão)', '<b>古</b>い (<b>furu</b>i - velho/antigo)', '名<b>古</b>屋 (na<b>go</b>ya - Nagoya)', '<span style="color:#bdc3c7;">💬 Frase: これは<b>古</b>いお寺です。(kore wa <b>furu</b>i otera desu - Este é um templo antigo.)</span>'], hpBase: 40, atk: 5 },
+        { id: 64, kanji: '長', romaji: ['chou', 'naga'], sig: ['longo', 'lider'], vocab: ['社<b>長</b> (sha<b>chou</b> - presidente da empresa)', '<b>長</b>い (<b>naga</b>i - longo)', '駅<b>長</b> (eki<b>chou</b> - chefe da estação)', '<span style="color:#bdc3c7;">💬 Frase: <b>長</b>い間、待っていました。(<b>naga</b>i aida, matte imashita - Esperei por um longo tempo.)</span>'], hpBase: 55, atk: 7 },
+        { id: 65, kanji: '多', romaji: ['ta', 'oo'], sig: ['muitos', 'muito'], vocab: ['<b>多</b>分 (<b>ta</b>bun - talvez/provavelmente)', '<b>多</b>い (<b>oo</b>i - muitos)', '<b>多</b>数 (<b>ta</b>suu - a maioria)', '<span style="color:#bdc3c7;">💬 Frase: 東京は人が<b>多</b>いです。(toukyou wa hito ga <b>oo</b>i desu - Tóquio tem muitas pessoas.)</span>'], hpBase: 45, atk: 6 },
+        { id: 66, kanji: '少', romaji: ['shou', 'suku', 'suko'], sig: ['pouco', 'alguns'], vocab: ['<b>少</b>ない (<b>suku</b>nai - pouco)', '<b>少</b>年 (<b>shou</b>nen - menino/garoto)', '<b>少</b>々 (<b>shou</b>shou - um momento)', '<span style="color:#bdc3c7;">💬 Frase: <b>少</b>々お待ちください。(<b>shou</b>shou omachi kudasai - Aguarde um momento, por favor.)</span>'], hpBase: 35, atk: 5 },
+        { id: 67, kanji: '白', romaji: ['haku', 'byaku', 'shiro', 'shira'], sig: ['branco'], vocab: ['<b>白</b>黒 (<b>shiro</b>kuro - preto e branco)', '面<b>白</b>い (omo<b>shiro</b>i - interessante/divertido)', '<b>白</b>い (<b>shiro</b>i - branco)', '<span style="color:#bdc3c7;">💬 Frase: <b>白</b>いシャツが好きです。(<b>shiro</b>i shatsu ga suki desu - Gosto de camisas brancas.)</span>'], hpBase: 35, atk: 5 },
+        { id: 68, kanji: '学', romaji: ['gaku', 'mana'], sig: ['estudo', 'aprender'], vocab: ['<b>学</b>生 (<b>gaku</b>sei - estudante)', '留<b>学</b> (ryuu<b>gaku</b> - intercâmbio)', '大<b>学</b> (dai<b>gaku</b> - universidade)', '<span style="color:#bdc3c7;">💬 Frase: 日本語を<b>学</b>んでいます。(nihongo o <b>mana</b>nde imasu - Estou aprendendo japonês.)</span>'], hpBase: 65, atk: 10 },
+        { id: 69, kanji: '校', romaji: ['kou'], sig: ['escola'], vocab: ['学<b>校</b> (gak<b>kou</b> - escola)', '<b>校</b>長 (<b>kou</b>chou - diretor da escola)', '高<b>校</b> (kou<b>kou</b> - ensino médio)', '<span style="color:#bdc3c7;">💬 Frase: 明日は学<b>校</b>に行きます。(ashita wa gak<b>kou</b> ni ikimasu - Amanhã vou para a escola.)</span>'], hpBase: 60, atk: 9 },
+        { id: 70, kanji: '見', romaji: ['ken', 'mi'], sig: ['ver', 'olhar'], vocab: ['花<b>見</b> (hana<b>mi</b> - ver as flores)', '<b>見</b>学 (<b>ken</b>gaku - visita de estudo)', '意<b>見</b> (i<b>ken</b> - opinião)', '<span style="color:#bdc3c7;">💬 Frase: 映画を<b>見</b>ます。(eiga o <b>mi</b>masu - Vou assistir a um filme.)</span>'], hpBase: 55, atk: 8 },
+        { id: 71, kanji: '食', romaji: ['shoku', 'ta', 'ku'], sig: ['comer', 'comida'], vocab: ['<b>食</b>べ放題 (<b>ta</b>be houdai - comer à vontade/rodízio)', '定<b>食</b> (tei<b>shoku</b> - prato feito)', '和<b>食</b> (wa<b>shoku</b> - comida japonesa)', '<span style="color:#bdc3c7;">💬 Frase: 寿司を<b>食</b>べます。(sushi o <b>ta</b>bemasu - Vou comer sushi.)</span>'], hpBase: 60, atk: 8 },
+        { id: 72, kanji: '飲', romaji: ['in', 'no'], sig: ['beber', 'bebida'], vocab: ['<b>飲</b>み放題 (<b>no</b>mi houdai - open bar/beber à vontade)', '<b>飲</b>食店 (<b>in</b>shokuten - restaurante/bar)', '<b>飲</b>料 (<b>in</b>ryou - bebida)', '<span style="color:#bdc3c7;">💬 Frase: ビールを<b>飲</b>みます。(biiru o <b>no</b>mimasu - Vou beber cerveja.)</span>'], hpBase: 60, atk: 8 },
+        { id: 73, kanji: '行', romaji: ['kou', 'gyou', 'i', 'yu', 'oko'], sig: ['ir', 'viajar'], vocab: ['旅<b>行</b> (ryo<b>kou</b> - viagem)', '銀<b>行</b> (gin<b>kou</b> - banco)', '<b>行</b>く (<b>i</b>ku - ir)', '<span style="color:#bdc3c7;">💬 Frase: コンビニへ<b>行</b>きます。(konbini e <b>i</b>kimasu - Vou à loja de conveniência.)</span>'], hpBase: 65, atk: 9 },
+        { id: 74, kanji: '来', romaji: ['rai', 'ku', 'ki', 'ko'], sig: ['vir', 'proximo'], vocab: ['<b>来</b>年 (<b>rai</b>nen - próximo ano)', '出<b>来</b>る (de<b>ki</b>ru - conseguir fazer)', '<b>来</b>る (<b>ku</b>ru - vir)', '<span style="color:#bdc3c7;">💬 Frase: 友達が家へ<b>来</b>ます。(tomodachi ga ie e <b>ku</b>ru - Meu amigo virá à minha casa.)</span>'], hpBase: 65, atk: 9 },
+        { id: 75, kanji: '語', romaji: ['go', 'kata'], sig: ['idioma', 'lingua', 'palavra'], vocab: ['日本<b>語</b> (nihon<b>go</b> - língua japonesa)', '敬<b>語</b> (kei<b>go</b> - linguagem formal)', '単<b>語</b> (tan<b>go</b> - vocabulário)', '<span style="color:#bdc3c7;">💬 Frase: 日本<b>語</b>を話せます。(nihon<b>go</b> o hanasemasu - Consigo falar japonês.)</span>'], hpBase: 80, atk: 12 },
+        { id: 76, kanji: '立', romaji: ['ritsu', 'ryuu', 'ta', 'da'], sig: ['ficar de pe', 'levantar'], vocab: ['役に<b>立</b>つ (yaku ni <b>ta</b>tsu - ser útil)', '目<b>立</b>つ (me<b>da</b>tsu - destacar-se)', '<b>立</b>つ (<b>ta</b>tsu - levantar-se)', '<span style="color:#bdc3c7;">💬 Frase: <b>立</b>ってください。(<b>ta</b>tte kudasai - Fique de pé, por favor.)</span>'], hpBase: 50, atk: 7 },
+        { id: 77, kanji: '生', romaji: ['sei', 'shou', 'i', 'u', 'nama', 'ha', 'ki'], sig: ['vida', 'nascer', 'viver', 'cru'], vocab: ['先<b>生</b> (sen<b>sei</b> - professor)', '<b>生</b>ビール (<b>nama</b> biiru - cerveja de pressão/chope)', '誕<b>生</b>日 (tan<b>jou</b>bi - aniversário)', '<span style="color:#bdc3c7;">💬 Frase: <b>生</b>ビールを一つください。(<b>nama</b> biiru o hitotsu kudasai - Um chope, por favor.)</span>'], hpBase: 75, atk: 11 },
+        { id: 78, kanji: '話', romaji: ['wa', 'hana', 'hanashi'], sig: ['falar', 'conversa', 'historia'], vocab: ['電<b>話</b> (den<b>wa</b> - telefone)', '世<b>話</b> (se<b>wa</b> - tomar conta/ajudar)', '<b>話</b>す (<b>hana</b>su - falar)', '<span style="color:#bdc3c7;">💬 Frase: 先生と<b>話</b>しました。(sensei to <b>hana</b>shimashita - Conversei com o professor.)</span>'], hpBase: 65, atk: 9 },
+        { id: 79, kanji: '読', romaji: ['doku', 'toku', 'to', 'yo'], sig: ['ler', 'leitura'], vocab: ['<b>読</b>書 (<b>doku</b>sho - leitura)', '<b>読</b>み方 (<b>yo</b>mikata - modo de ler)', '<b>読</b>む (<b>yo</b>mu - ler)', '<span style="color:#bdc3c7;">💬 Frase: 毎晩、本を<b>読</b>みます。(maiban, hon o <b>yo</b>mimasu - Toda noite, leio um livro.)</span>'], hpBase: 60, atk: 8 },
+        { id: 80, kanji: '書', romaji: ['sho', 'ka'], sig: ['escrever', 'livro'], vocab: ['辞<b>書</b> (ji<b>sho</b> - dicionário)', '図<b>書</b>館 (to<b>sho</b>kan - biblioteca)', '<b>書</b>く (<b>ka</b>ku - escrever)', '<span style="color:#bdc3c7;">💬 Frase: ノートに名前を<b>書</b>きます。(nooto ni namae o <b>ka</b>kimasu - Escrevo o nome no caderno.)</span>'], hpBase: 60, atk: 8 },
+        { id: 81, kanji: '買', romaji: ['bai', 'ka'], sig: ['comprar'], vocab: ['<b>買</b>い物 (<b>ka</b>imono - compras)', '<b>買</b>い手 (<b>ka</b>ite - comprador)', '<b>買</b>う (<b>ka</b>u - comprar)', '<span style="color:#bdc3c7;">💬 Frase: スーパーで野菜を<b>買</b>います。(suupaa de yasai o <b>ka</b>imasu - Compro vegetais no supermercado.)</span>'], hpBase: 55, atk: 8 },
+        { id: 82, kanji: '入', romaji: ['nyuu', 'i', 'hai'], sig: ['entrar', 'inserir'], vocab: ['<b>入</b>口 (<b>iri</b>guchi - entrada)', '輸<b>入</b> (yu<b>nyuu</b> - importação)', '<b>入</b>れる (<b>i</b>reru - colocar dentro)', '<span style="color:#bdc3c7;">💬 Frase: かばんにペンを<b>入</b>れました。(kaban ni pen o <b>i</b>remashita - Coloquei a caneta na bolsa.)</span>'], hpBase: 45, atk: 6 },
+        { id: 83, kanji: '出', romaji: ['shutsu', 'sui', 'de', 'da'], sig: ['sair', 'tirar'], vocab: ['<b>出</b>口 (<b>de</b>guchi - saída)', '<b>出</b>張 (<b>shuc</b>chou - viagem de negócios)', '<b>出</b>す (<b>da</b>su - tirar/enviar)', '<span style="color:#bdc3c7;">💬 Frase: ゴミを<b>出</b>してください。(gomi o <b>da</b>shite kudasai - Coloque o lixo para fora, por favor.)</span>'], hpBase: 50, atk: 7 },
+        { id: 84, kanji: '友', romaji: ['yuu', 'tomo'], sig: ['amigo'], vocab: ['<b>友</b>達 (<b>tomo</b>dachi - amigo)', '<b>友</b>人 (<b>yuu</b>jin - amigo [formal])', '親<b>友</b> (shin<b>yuu</b> - melhor amigo)', '<span style="color:#bdc3c7;">💬 Frase: <b>友</b>達と遊びます。(<b>tomo</b>dachi to asobimasu - Vou brincar/sair com meu amigo.)</span>'], hpBase: 55, atk: 7 },
+        { id: 85, kanji: '車', romaji: ['sha', 'kuruma'], sig: ['carro', 'veiculo'], vocab: ['電<b>車</b> (den<b>sha</b> - trem)', '自転<b>車</b> (jiten<b>sha</b> - bicicleta)', '<b>車</b>椅子 (<b>kuruma</b>isu - cadeira de rodas)', '<span style="color:#bdc3c7;">💬 Frase: <b>車</b>で会社へ行きます。(<b>kuruma</b> de kaisha e ikimasu - Vou de carro para a empresa.)</span>'], hpBase: 60, atk: 8 },
+        { id: 86, kanji: '電', romaji: ['den'], sig: ['eletricidade', 'energia'], vocab: ['<b>電</b>車 (<b>den</b>sha - trem)', '<b>電</b>話 (<b>den</b>wa - telefone)', '<b>電</b>気 (<b>den</b>ki - eletricidade/luz)', '<span style="color:#bdc3c7;">💬 Frase: <b>電</b>気を消してください。(<b>den</b>ki o keshite kudasai - Apague a luz, por favor.)</span>'], hpBase: 70, atk: 12 },
+        { id: 87, kanji: '気', romaji: ['ki', 'ke'], sig: ['espirito', 'mente', 'ar', 'energia'], vocab: ['天<b>気</b> (ten<b>ki</b> - estado do tempo)', '病<b>気</b> (byou<b>ki</b> - doença)', '元<b>気</b> (gen<b>ki</b> - saudável/energia)', '<span style="color:#bdc3c7;">💬 Frase: お元<b>気</b>ですか？ (o<b>gen</b>ki desu ka? - Como você está?)</span>'], hpBase: 65, atk: 10 },
+        { id: 88, kanji: '本', romaji: ['hon', 'moto', 'pon', 'bon'], sig: ['livro', 'origem', 'base'], vocab: ['日<b>本</b> (ni<b>hon</b> - Japão)', '<b>本</b>当 (<b>hon</b>tou - verdade)', '絵<b>本</b> (e<b>hon</b> - livro ilustrado)', '<span style="color:#bdc3c7;">💬 Frase: これは面白い<b>本</b>です。(kore wa omoshiroi <b>hon</b> desu - Este é um livro interessante.)</span>'], hpBase: 50, atk: 7 },
+        { id: 89, kanji: '何', romaji: ['ka', 'nani', 'nan'], sig: ['o que', 'quantos'], vocab: ['<b>何</b>時 (<b>nan</b>ji - que horas?)', '<b>何</b>人 (<b>nan</b>nin - quantas pessoas?)', '<b>何</b>か (<b>nani</b>ka - alguma coisa)', '<span style="color:#bdc3c7;">💬 Frase: これは<b>何</b>ですか？ (kore wa <b>nan</b>i desu ka? - O que é isto?)</span>'], hpBase: 60, atk: 9 },
+        { id: 90, kanji: '名', romaji: ['mei', 'myou', 'na'], sig: ['nome', 'fama'], vocab: ['<b>名</b>前 (<b>nama</b>e - nome)', '有<b>名</b> (yuu<b>mei</b> - famoso)', '<b>名</b>刺 (<b>mei</b>shi - cartão de visitas)', '<span style="color:#bdc3c7;">💬 Frase: お<b>名</b>前は何ですか？ (o<b>nama</b>e wa nan desu ka? - Qual é o seu nome?)</span>'], hpBase: 45, atk: 6 },
+        { id: 91, kanji: '駅', romaji: ['eki'], sig: ['estacao', 'estacao de trem'], vocab: ['<b>駅</b>前 (<b>eki</b>mae - em frente à estação)', '東京<b>駅</b> (toukyou <b>eki</b> - Estação de Tóquio)', '<b>駅</b>員 (<b>eki</b>in - funcionário da estação)', '<span style="color:#bdc3c7;">💬 Frase: <b>駅</b>まで歩きます。(<b>eki</b> made arukimasu - Vou andar até a estação.)</span>'], hpBase: 60, atk: 8 },
+        { id: 92, kanji: '店', romaji: ['ten', 'mise'], sig: ['loja', 'estabelecimento'], vocab: ['喫茶<b>店</b> (kissa<b>ten</b> - cafeteria)', '<b>店</b>員 (<b>ten</b>\'in - funcionário da loja)', 'お<b>店</b> (o<b>mise</b> - loja)', '<span style="color:#bdc3c7;">💬 Frase: あの<b>店</b>は美味しいです。(ano <b>mise</b> wa oishii desu - Aquele restaurante é gostoso.)</span>'], hpBase: 50, atk: 7 },
+        { id: 93, kanji: '道', romaji: ['dou', 'michi'], sig: ['caminho', 'rua'], vocab: ['<b>道</b>路 (<b>dou</b>ro - estrada/via)', '北海<b>道</b> (hokkai<b>dou</b> - região de Hokkaido)', '片<b>道</b> (kata<b>michi</b> - viagem só de ida)', '<span style="color:#bdc3c7;">💬 Frase: <b>道</b>に迷いました。(<b>michi</b> ni mayoimashita - Eu me perdi no caminho.)</span>'], hpBase: 55, atk: 8 },
+        { id: 94, kanji: '国', romaji: ['koku', 'kuni', 'goku'], sig: ['pais', 'nacao'], vocab: ['外<b>国</b> (gai<b>koku</b> - país estrangeiro)', '中<b>国</b> (chuu<b>goku</b> - China)', '<b>国</b>内 (<b>koku</b>nai - doméstico/interno)', '<span style="color:#bdc3c7;">💬 Frase: あなたの<b>国</b>はどこですか？ (anata no <b>kuni</b> wa doko desu ka? - De qual país você é?)</span>'], hpBase: 65, atk: 9 }
+    ];
+
+    // ==========================================
+    // PATCH DE COMPATIBILIDADE NATIVA (Nihon-shiki)
+    // Converte automaticamente Hepburn para o jeito que os japoneses digitam
+    // ==========================================
+    DATABASE.forEach(k => {
+        let novosRomajis = [];
+        k.romaji.forEach(r => {
+            let alternativo = r.replace(/shi/g, 'si')
+                               .replace(/chi/g, 'ti')
+                               .replace(/tsu/g, 'tu')
+                               .replace(/fu/g, 'hu')
+                               .replace(/ji/g, 'zi')
+                               .replace(/sho/g, 'syo')
+                               .replace(/shu/g, 'syu')
+                               .replace(/sha/g, 'sya')
+                               .replace(/cho/g, 'tyo')
+                               .replace(/chu/g, 'tyu')
+                               .replace(/cha/g, 'tya')
+                               .replace(/jo/g, 'zyo')
+                               .replace(/ju/g, 'zyu')
+                               .replace(/ja/g, 'zya');
+            
+            // Se gerou uma digitação diferente (ex: tsuki virou tuki), adiciona como resposta correta
+            if (alternativo !== r && !k.romaji.includes(alternativo)) {
+                novosRomajis.push(alternativo);
+            }
+        });
+        // Junta os jeitos de gringo e de japonês digitar
+        k.romaji = k.romaji.concat(novosRomajis);
+    });
+
+    const RARITIES = {
+        'c': { name: 'Comum', rate: 80.9, catchChance: 1.0, statMult: 1.0, color: 'r-c' },
+        'r': { name: 'Rara', rate: 12, catchChance: 0.7, statMult: 2, color: 'r-r' },
+        'sr': { name: 'Super Rara', rate: 5, catchChance: 0.4, statMult: 3, color: 'r-sr' },
+        'ur': { name: 'Ultra Rara', rate: 2, catchChance: 0.15, statMult: 3.5, color: 'r-ur' },
+        'lr': { name: 'Lendária', rate: 0.1, catchChance: 0.05, statMult: 4, color: 'r-lr' }
+    };
+
+    let player = { hp: 100, maxHp: 100, level: 1, xp: 0, gold: 50, potions: 3, dex: {}, mastery: {} };
+    let inBattle = false, isGymMode = false, gymFightsLeft = 0, enemy = null, enemyTimer = null;
+
+    // --- MOTOR NINTENDO (Diálogo e Vibração) ---
+    let dialogCallback = null, isTyping = false, fullText = "", typeInterval;
+    
+    function vibrar(padrao) { if (navigator.vibrate) navigator.vibrate(padrao); }
+
+    function mostrarDialogo(texto, callback = null, instantaneo = false) {
+        document.getElementById('rpg-dialog').classList.add('active');
+        const textEl = document.getElementById('rpg-dialog-text'); textEl.innerHTML = "";
+        fullText = texto.replace(/\n/g, '<br>'); dialogCallback = callback;
+        document.querySelector('.rpg-dialog-arrow').style.display = 'none';
+
+        // --- NOVO: Se for uma Ficha de Dados, aparece na hora! ---
+        if (instantaneo) {
+            textEl.innerHTML = fullText;
+            isTyping = false;
+            document.querySelector('.rpg-dialog-arrow').style.display = 'block';
+            return;
+        }
+
+        // --- CORREÇÃO DO BUG DOS ">>>>>" ---
+        isTyping = true;
+        let i = 0; clearInterval(typeInterval);
+        typeInterval = setInterval(() => {
+            if(i < fullText.length) {
+                if(fullText.charAt(i) === '<') { 
+                    let tag = ""; 
+                    while(fullText.charAt(i) !== '>' && i < fullText.length) { 
+                        tag += fullText.charAt(i); i++; 
+                    } 
+                    tag += '>'; textEl.innerHTML += tag; i++; // <--- O i++ aqui conserta o bug!
+                } else { textEl.innerHTML += fullText.charAt(i); i++; }
+            } else {
+                clearInterval(typeInterval); isTyping = false; document.querySelector('.rpg-dialog-arrow').style.display = 'block';
+            }
+        }, 25); 
+    }
+
+    function avancarDialogo() {
+    if(isTyping) { 
+        // Não faz nada! Trava a tela até o texto terminar de ser digitado.
+        return; 
+    } else { 
+        // Fecha a caixa e executa a próxima ação (como spawnar o próximo monstro)
+        document.getElementById('rpg-dialog').classList.remove('active'); 
+        document.querySelector('.rpg-dialog-arrow').style.display = 'none';
+        if(dialogCallback) dialogCallback();
+    }
+}
+
+    function init() {
+        window.scrollTo(0, 0); // Garante que o F5 sempre abra no topo
+        
+        const saved = localStorage.getItem('kanjimonUltimate');
+        if (saved) { 
+            player = JSON.parse(saved); 
+            if (!player.mastery) player.mastery = {}; 
+        }
+
+        // --- CHECAGEM DE BOAS-VINDAS (SCROLL) ---
+        const indicator = document.getElementById('scroll-indicator');
+        if (indicator && player.level < 3) {
+            indicator.classList.add('visible');
+        }
+
+        atualizarHUD();
+    }
+    
+    function salvarJogo() { localStorage.setItem('kanjimonUltimate', JSON.stringify(player)); atualizarHUD(); }
+    function log(msg, color = "#ccc") { const box = document.getElementById('battle-log'); box.innerHTML = `<div style="color:${color}; margin-bottom:4px;">> ${msg}</div>` + box.innerHTML; }
+    function trocarTela(id) { 
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); 
+        document.getElementById(id).classList.add('active'); 
+        window.scrollTo(0, 0); // Sempre que muda de tela, joga o jogador para o topo
+        
+        // A pílula de scroll aparece no menu E SE o jogador for nível menor que 3
+        const indicator = document.getElementById('scroll-indicator');
+        if (indicator) {
+            if (id === 'screen-main' && player.level < 3) {
+                indicator.classList.add('visible');
+            } else {
+                indicator.classList.remove('visible');
+            }
+        }
+    }
+
+    function animarDano(id) { const el = document.getElementById(id); el.classList.remove('hit-shake'); void el.offsetWidth; el.classList.add('hit-shake'); }
+    function animarDanoInimigo() { const el = document.getElementById('enemy-sprite'); el.classList.remove('hit-shake'); void el.offsetWidth; el.classList.add('hit-shake'); }
+    function flashArenaVermelho() { const flash = document.getElementById('arena-flash'); flash.style.opacity = 1; setTimeout(() => { flash.style.opacity = 0; }, 150); }
+
+    function criarVfxCorte(alvoX, alvoY) {
+        const corte = document.createElement('div'); corte.className = 'attack-slash'; corte.style.left = alvoX + 'px'; corte.style.top = alvoY + 'px';
+        const angulo = Math.random() * 60 - 30; corte.style.transform = `translate(-50%, -50%) rotate(${45 + angulo}deg)`;
+        corte.style.boxShadow = `0 0 15px #fff, 0 0 30px var(--primary)`; document.getElementById('battle-arena').appendChild(corte); setTimeout(() => corte.remove(), 400);
+    }
+
+    function criarTextoDano(texto, cor, isInimigo = true) {
+        const arena = document.getElementById('battle-arena'); const rect = arena.getBoundingClientRect(); const el = document.createElement('div');
+        el.className = 'dmg-text'; el.style.color = cor; el.innerText = texto;
+        const posX = (rect.width / 2) + (Math.random() * 40 - 20); let posY;
+        if (isInimigo) { posY = (rect.height / 2) - 40 + (Math.random() * 20 - 10); } else { posY = rect.height - 30; }
+        el.style.left = posX + 'px'; el.style.top = posY + 'px'; el.style.transform = 'translate(-50%, -50%)';
+        arena.appendChild(el); setTimeout(() => el.remove(), 1200);
+    }
+
+    function atualizarHUD() {
+        document.getElementById('ui-level').innerText = player.level;
+        document.getElementById('ui-hp-text').innerText = `${player.hp}/${player.maxHp}`;
+        document.getElementById('ui-hp').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+        // NOVA FÓRMULA: Dobro de lutas do total de Kanjis liberados
+        let xpNecessario = (player.level * 200) + 400;
+        document.getElementById('ui-xp').style.width = `${(player.xp / xpNecessario) * 100}%`;
+        document.getElementById('ui-gold').innerText = player.gold;
+        document.getElementById('ui-potions').innerText = player.potions;
+        let totalCartas = 0; for (let k in player.dex) totalCartas += player.dex[k];
+        document.getElementById('ui-dex-count').innerText = totalCartas;
+        
+        // --- NOVO: INDICADOR DE KANJIS LIBERADOS ---
+        let maxLiberados = Math.min(DATABASE.length, (player.level * 5) + 10);
+        const poolText = document.getElementById('ui-unlocked-pool');
+        if (poolText) poolText.innerText = `${maxLiberados}/${DATABASE.length} Liberados`;
+    }
+
+    function explodirCarta(element, color, amount = 25) {
+        const rect = element.getBoundingClientRect(); const cx = rect.left + rect.width / 2; const cy = rect.top + rect.height / 2;
+        // Se for tela muito pequena, gera menos particulas pra nao travar o celular
+        const mobileAmount = window.innerWidth < 600 ? Math.floor(amount / 2) : amount;
+        for(let i=0; i<mobileAmount; i++){
+            const p = document.createElement("div"); p.className = "particle"; p.style.background = color; p.style.boxShadow = `0 0 15px ${color}`;
+            p.style.left = cx + "px"; p.style.top = cy + "px"; p.style.setProperty("--x", (Math.random() * 600 - 300) + "px"); p.style.setProperty("--y", (Math.random() * 600 - 300) + "px");
+            document.body.appendChild(p); setTimeout(() => p.remove(), 800);
+        }
+    }
+
+    function abrirBooster() {
+        if (player.gold < 150) { vibrar([50, 50]); return mostrarDialogo("Ouro insuficiente! Você precisa de 150💰.", null, true); }
+        player.gold -= 150; salvarJogo();
+        const container = document.getElementById('gacha-cards-container'); container.innerHTML = ""; document.getElementById('gacha-btn-voltar').style.display = 'none';
+        
+        let puxos = [];
+        for(let i=0; i<3; i++) {
+            const baseK = DATABASE[Math.floor(Math.random() * DATABASE.length)]; let rand = Math.random() * 100, sum = 0, rKey = 'c';
+            for (const [key, rData] of Object.entries(RARITIES)) { sum += rData.rate; if (rand <= sum) { rKey = key; break; } }
+            puxos.push({ ...baseK, rKey, rData: RARITIES[rKey] }); player.dex[`${baseK.id}_${rKey}`] = (player.dex[`${baseK.id}_${rKey}`] || 0) + 1;
+        }
+        salvarJogo();
+        
+        puxos.forEach((puxo, index) => {
+            const div = document.createElement('div'); 
+            // NOVO: Adiciona a classe de queda (card-drop-anim) e o atraso (animationDelay)
+            div.className = 'gacha-card-wrapper card-drop-anim';
+            div.style.animationDelay = `${index * 0.15}s`; // Carta 1 cai na hora, Carta 2 atrasa 0.15s, etc.
+            
+            let teaseClass = ""; let rayColor = "transparent";
+            if (puxo.rKey === 'sr') { teaseClass = "tease-sr"; rayColor = "rgba(241,196,15,0.4)"; }
+            if (puxo.rKey === 'ur') { teaseClass = "tease-ur"; rayColor = "rgba(255,159,67,0.5)"; }
+            if (puxo.rKey === 'lr') { teaseClass = "tease-lr"; rayColor = "rgba(255,0,255,0.6)"; }
+
+            div.innerHTML = `
+                <div class="light-rays" id="rays-${index}" style="background: repeating-conic-gradient(${rayColor} 0deg, ${rayColor} 10deg, transparent 10deg, transparent 20deg);"></div>
+                <div class="card-inner" id="gacha-inner-${index}">
+                    <div class="card-flash" id="card-flash-${index}"></div>
+                    <div class="card-face card-back ${teaseClass}">?</div>
+                    <div class="card-face card-front r-${puxo.rKey}">
+                        <div style="font-size: 65px; margin-bottom: 5px; font-family: 'Noto Sans JP', sans-serif;">${puxo.kanji}</div>
+                        <div style="font-size: 13px; font-weight: bold;">${puxo.rData.name}</div>
+                    </div>
+                </div>`;
+            
+            div.onclick = () => {
+                div.onclick = null; 
+                div.style.animation = 'none'; // Desliga a animação de queda ao clicar
+                const inner = document.getElementById(`gacha-inner-${index}`); const flash = document.getElementById(`card-flash-${index}`); const rays = document.getElementById(`rays-${index}`);
+                
+                inner.classList.add('epic-flip');
+                
+                setTimeout(() => {
+                    flash.classList.add('flash-boom'); inner.parentElement.classList.add('flipped');
+                    if (['sr', 'ur', 'lr'].includes(puxo.rKey)) rays.classList.add('active'); 
+
+                    if (puxo.rKey === 'sr') { explodirCarta(inner.parentElement, 'var(--gold)', 30); vibrar([50]);
+                    } else if (puxo.rKey === 'ur') { explodirCarta(inner.parentElement, '#ff9f43', 50); animarDano('screen-gacha'); vibrar([100, 50, 100]);
+                    } else if (puxo.rKey === 'lr') { explodirCarta(inner.parentElement, '#ff00ff', 80); explodirCarta(inner.parentElement, '#00ffff', 80); animarDano('screen-gacha'); setTimeout(() => animarDano('game-wrapper'), 150); const globalFlash = document.getElementById("flash"); globalFlash.style.opacity = 0.7; setTimeout(() => globalFlash.style.opacity = 0, 200); vibrar([200, 100, 200, 100, 300]);
+                    } else { explodirCarta(inner.parentElement, '#fff', 15); }
+                    
+                    if (document.querySelectorAll('.gacha-card-wrapper.flipped').length === 3) setTimeout(() => document.getElementById('gacha-btn-voltar').style.display = 'inline-block', 1000);
+                }, 350); 
+            };
+            container.appendChild(div);
+        });
+
+        // --- NOVA LÓGICA DE INTERAÇÃO DO PACOTE ---
+        const overlay = document.getElementById("booster-overlay"); 
+        const pack = document.getElementById("booster-pack"); 
+        const hint = document.getElementById("booster-hint");
+        
+        overlay.style.display = "flex"; 
+        pack.style.animation = "packFloat 2s infinite ease-in-out"; 
+        hint.style.display = "block"; // Mostra o texto
+        
+        // O jogo PAUSA esperando a ação do jogador:
+        pack.onclick = () => {
+            pack.onclick = null; // Trava contra duplo clique
+            hint.style.display = "none"; // Some com o texto de ajuda
+            vibrar([100, 50, 100]); // Tremidinha
+            pack.style.animation = "packShake 0.1s infinite"; // Pacote treme absurdamente
+            
+            // Depois de meio segundo tremendo, ele explode
+            setTimeout(() => {
+                const flash = document.getElementById("flash"); flash.style.opacity = 1;
+                const cx = window.innerWidth / 2; const cy = window.innerHeight / 2; const mobileAmount = window.innerWidth < 600 ? 20 : 40;
+                for(let i=0; i<mobileAmount; i++){ const p = document.createElement("div"); p.className = "particle"; p.style.left = cx + "px"; p.style.top = cy + "px"; p.style.setProperty("--x", (Math.random() * 800 - 400) + "px"); p.style.setProperty("--y", (Math.random() * 800 - 400) + "px"); document.body.appendChild(p); setTimeout(() => p.remove(), 800); }
+                
+                setTimeout(() => { flash.style.opacity = 0; }, 200); 
+                setTimeout(() => { overlay.style.display = "none"; trocarTela('screen-gacha'); }, 250);
+            }, 600); // Tensão de 0.6 segundos
+        };
+    }
+
+    function mostrarEscolhaLevelUp(callback) {
+        const proxNivel = player.level + 1;
+        const nivelAnterior = Math.max(1, player.level - 1); 
+        
+        // --- MATEMÁTICA INTELIGENTE DE PROGRESSÃO ---
+        const maxLiberadosAtual = Math.min(DATABASE.length, (player.level * 5) + 10);
+        const maxLiberadosProx = Math.min(DATABASE.length, (proxNivel * 5) + 10);
+        const novosKanjis = maxLiberadosProx - maxLiberadosAtual;
+        
+        let textoEvolucao = `Você dominou a região atual!<br>Avançar para o Nível <b style="color:var(--gold);">${proxNivel}</b> `;
+        if (novosKanjis > 0) {
+            textoEvolucao += `vai liberar <b>+${novosKanjis} Novos Kanjis</b> selvagens na Caçada.`;
+        } else {
+            textoEvolucao += `vai aumentar seu HP Máximo para as batalhas de Ginásio! (A KanjiDex está completa!)`;
+        }
+        
+        document.getElementById('lvl-modal-text').innerHTML = textoEvolucao;
+        document.getElementById('lvl-next-btn').innerText = proxNivel;
+        document.getElementById('lvl-prev').innerText = nivelAnterior;
+
+        const modal = document.getElementById('modal-levelup');
+        modal.classList.add('active');
+
+        // Se escolher AVANÇAR
+        document.getElementById('btn-lvl-yes').onclick = () => {
+            modal.classList.remove('active');
+            player.level++;
+            player.xp = 0;
+            player.maxHp += 20;
+            player.hp = player.maxHp;
+            salvarJogo();
+            vibrar([100, 100, 100]);
+            
+            let maxLiberados = Math.min(DATABASE.length, (player.level * 5) + 10);
+            log(`LEVEL UP! Nível ${player.level}.`, "var(--gold)");
+            
+            mostrarDialogo(
+                `<span style='color:var(--gold)'>🌟 LEVEL UP! Nível ${player.level} 🌟</span><br><br>` +
+                `Sua mente se expandiu!<br>` +
+                `Novos Kanjis selvagens começaram a aparecer na região.<br><br>` +
+                `<span style='font-size:14px; color:#aaa;'>(Kanji na Rotação: ${maxLiberados}/${DATABASE.length})</span>`,
+                callback, false
+            );
+        };
+
+        // Se escolher RECUAR (Voltar um nível)
+        document.getElementById('btn-lvl-no').onclick = () => {
+            modal.classList.remove('active');
+            
+            player.level = nivelAnterior; // <-- AQUI! Volta um nível pra trás
+            player.xp = 0; // Zera a barra
+            
+            salvarJogo();
+            log(`Optou por treinar a base. Recuou para o Nível ${player.level}.`, "#e74c3c");
+            vibrar([50]);
+            callback(); // Continua o jogo normalmente
+        };
+    }
+
+    function iniciarBatalha(gym) { 
+        isGymMode = gym; 
+        gymFightsLeft = gym ? 3 : 99999;
+        document.getElementById('btn-fugir').disabled = gym; 
+        document.getElementById('battle-log').innerHTML = ""; 
+        document.getElementById('combo-text').style.display = "none";
+        
+        const arena = document.getElementById('battle-arena');
+        if (gym) { arena.classList.add('gym-mode'); arena.classList.remove('hunt-mode'); } 
+        else { arena.classList.add('hunt-mode'); arena.classList.remove('gym-mode'); }
+
+        trocarTela('screen-battle'); 
+
+        // --- TUTORIAL DA CAÇADA (Com a dica de Inspecionar) ---
+        if (!gym && !player.vistoTutorialCacada) {
+            player.vistoTutorialCacada = true; 
+            salvarJogo();
+            mostrarDialogo(
+                "<span style='color:var(--success)'>🌿 BEM-VINDO À CAÇADA CONTÍNUA 🌿</span><br><br>" +
+                "Este é o ambiente de formação para todo Mestre KanjiMon.<br><br>" +
+                "Como você ainda é <b>Nível 1</b>, apenas os 15 Kanjis mais acessíveis habitam esta área.<br>" +
+                "Conforme você batalha, aprimora suas habilidades e <b>sobe de nível</b>, Kanjis novos e mais complexos aparecerão.<br><br>" +
+                "⚠️ Se não souber um Kanji, não entre em pânico! Use o botão azul <b style='color:#3498db'>🔍 INSPECIONAR</b> para pausar a luta e aprender sobre ele.<br><br>" +
+                "<span style='font-size:13px; color:#aaa;'>(Dica: Treine aqui para obter Ouro e expandir sua coleção na KanjiDex!)</span>",
+                () => { spawnEnemy(); } 
+            );
+        } else {
+            spawnEnemy(); 
+        }
+    }
+
+    function spawnEnemy() {
+        if (player.hp <= 0) return gameOver();
+        const pool = DATABASE.filter(k => k.id <= (player.level * 5) + 10); let weightedPool = [];
+        pool.forEach(baseK => {
+            if (!player.mastery[baseK.kanji]) player.mastery[baseK.kanji] = { errors: 0, streak: 0, maxStreak: 0 };
+            let pData = player.mastery[baseK.kanji];
+            let peso = 100; if (pData.maxStreak === 0) peso += 200; peso += (pData.errors * 50); peso = Math.floor(peso / (1 + (pData.maxStreak * 2))); peso = Math.max(1, peso);
+            for(let i = 0; i < peso; i++) weightedPool.push(baseK);
+        });
+        const baseK = weightedPool[Math.floor(Math.random() * weightedPool.length)];
+        
+        let rand = Math.random() * 100, sum = 0, rKey = 'c';
+        for (const [key, rData] of Object.entries(RARITIES)) { sum += rData.rate; if (rand <= sum) { rKey = key; break; } }
+        
+        const rData = RARITIES[rKey]; 
+        let isBoss = (isGymMode && gymFightsLeft === 1);
+        const buff = isBoss ? 2.5 * rData.statMult : (isGymMode ? 1.3 : 1) * rData.statMult;
+        
+        // isEnraged adicionado aqui
+        enemy = { ...baseK, rarityKey: rKey, rName: rData.name, rColor: rData.color, catchChance: rData.catchChance, maxHp: Math.floor(baseK.hpBase * buff), hp: Math.floor(baseK.hpBase * buff), atk: Math.floor(baseK.atk * buff), isBoss: isBoss, isEnraged: false };
+        
+        document.getElementById('battle-title').innerText = isGymMode ? (isBoss ? "🔥 LÍDER DO GINÁSIO 🔥" : `GINÁSIO (Luta ${4 - gymFightsLeft}/3)`) : "Caçada Contínua";
+        
+        const sprite = document.getElementById('enemy-sprite'); 
+        sprite.innerText = enemy.kanji; 
+        sprite.className = `enemy-sprite ${enemy.rColor} ${isBoss ? 'boss-sprite' : ''}`;
+        
+        // Limpa os efeitos de fúria se houver
+        sprite.style.color = ""; 
+        sprite.style.filter = ""; 
+        
+        const rarityTag = document.getElementById('enemy-rarity-text'); rarityTag.innerText = enemy.rName; 
+        rarityTag.style.borderColor = rData.color === 'r-c' ? '#7f8c8d' : (rData.color === 'r-r' ? 'var(--silver)' : (rData.color === 'r-sr' ? 'var(--gold)' : (rData.color === 'r-ur' ? '#ff9f43' : '#ff00ff'))); rarityTag.style.color = rarityTag.style.borderColor;
+        
+        atualizarHpInimigo(); 
+        
+        if (isBoss) log(`⚠️ CUIDADO: O LÍDER ${enemy.kanji} SURGIU! ⚠️`, "var(--danger)");
+        else log(`Um ${enemy.kanji} (${enemy.rName}) apareceu!`, "#fff");
+        
+        const inputBox = document.getElementById('player-input'); inputBox.value = ""; 
+        setTimeout(() => inputBox.focus(), 50);
+        inBattle = true; iniciarTimerInimigo();
+    }
+
+    function atualizarHpInimigo() { 
+        const pct = Math.max(0, Math.floor((enemy.hp / enemy.maxHp) * 100)); document.getElementById('enemy-hp-text').innerText = `${pct}%`; 
+        const fill = document.getElementById('enemy-hp-fill'); fill.style.width = `${pct}%`;
+        if (pct > 50) fill.style.background = "linear-gradient(90deg, #2ecc71, #27ae60)"; else if (pct > 20) fill.style.background = "linear-gradient(90deg, #f1c40f, #f39c12)"; else fill.style.background = "linear-gradient(90deg, #e74c3c, #c0392b)";
+    }
+
+    function iniciarTimerInimigo() { clearInterval(enemyTimer); enemyTimer = setInterval(() => { if (!inBattle) return; player.hp -= enemy.atk; flashArenaVermelho(); criarTextoDano(`-${enemy.atk}`, 'var(--danger)', false); log(`O Kanji atacou! -${enemy.atk} HP.`, "#e74c3c"); atualizarHUD(); if (player.hp <= 0) gameOver(); }, 2000); }
+
+    function processarAtaque() {
+        if (!inBattle) return;
+        const inputRaw = document.getElementById('player-input').value.toLowerCase().trim(); 
+        const input = inputRaw.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); 
+        document.getElementById('player-input').value = "";
+        if (input === "") return;
+        
+        const sigsLimpos = enemy.sig.map(s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+        
+        if (sigsLimpos.includes(input) || enemy.romaji.includes(inputRaw)) {
+            const arenaRect = document.getElementById('battle-arena').getBoundingClientRect(); 
+            criarVfxCorte(arenaRect.width / 2, arenaRect.height / 2 - 20); 
+            animarDanoInimigo(); 
+            
+            enemy.battleHits = (enemy.battleHits || 0) + 1;
+            if (enemy.battleHits > 1) { 
+                const comboEl = document.getElementById('combo-text'); 
+                comboEl.innerText = `Combo x${enemy.battleHits}`; 
+                comboEl.style.display = "inline-block"; 
+                comboEl.style.animation = "none"; 
+                void comboEl.offsetWidth; 
+                comboEl.style.animation = "hitShake 0.3s"; 
+            }
+            
+            // --- NOVO: BOSS NÃO TOMA HIT KILL ---
+            let isSeloPerfeito = (Math.random() <= enemy.catchChance) && !enemy.isBoss;
+
+            if (isSeloPerfeito) { 
+                enemy.hp = 0; 
+                atualizarHpInimigo(); 
+                criarTextoDano("CAPTURADO!", "var(--success)", true); 
+                log(`Selo Perfeito! (Ataques: ${enemy.battleHits})`, "var(--success)"); 
+                vencerBatalha(); 
+            } else { 
+                // Boss toma 30% por hit (precisa de 4), mobs tomam 40% (precisam de 3)
+                let danoCausado = Math.floor(enemy.maxHp * (enemy.isBoss ? 0.3 : 0.4)); 
+                enemy.hp -= danoCausado; 
+                atualizarHpInimigo(); 
+                criarTextoDano(`-${danoCausado}`, "#fff", true); 
+                
+                // --- FASE 2: A FÚRIA DO LÍDER ---
+                if (enemy.isBoss && enemy.hp > 0 && enemy.hp <= (enemy.maxHp * 0.5) && !enemy.isEnraged) {
+                    enemy.isEnraged = true;
+                    enemy.atk = Math.floor(enemy.atk * 1.5); // Dano aumenta
+                    
+                    log("🔥 O LÍDER ENTROU EM FÚRIA! VELOCIDADE INSANA! 🔥", "var(--danger)");
+                    criarTextoDano("FÚRIA!", "var(--danger)", true);
+                    
+                    const bossSprite = document.getElementById('enemy-sprite');
+                    bossSprite.style.color = "#ff4444";
+                    bossSprite.style.filter = "drop-shadow(0 0 30px #ff0000)";
+                    
+                    // Dobra a velocidade de ataque (de 2s para 1s)
+                    clearInterval(enemyTimer);
+                    enemyTimer = setInterval(() => {
+                        if (!inBattle) return;
+                        player.hp -= enemy.atk;
+                        flashArenaVermelho();
+                        criarTextoDano(`-${enemy.atk}`, 'var(--danger)', false);
+                        log(`Golpe Furioso! -${enemy.atk} HP.`, "#e74c3c");
+                        atualizarHUD();
+                        if (player.hp <= 0) gameOver();
+                    }, 1000);
+                }
+
+                if (enemy.hp <= 0) { 
+                    log(`Escudo quebrado! Carta selada.`, "var(--success)"); 
+                    criarTextoDano("SELADO!", "var(--success)", true); 
+                    vencerBatalha(); 
+                } else if (!enemy.isEnraged) { 
+                    log(`Acertou! Mas o Kanji resistiu.`, "var(--gold)"); 
+                } 
+            }
+        } else { 
+            enemy.flawless = false; 
+            enemy.battleHits = 0; 
+            player.mastery[enemy.kanji].errors++; 
+            player.mastery[enemy.kanji].streak = 0; 
+            document.getElementById('combo-text').style.display = "none"; 
+            criarTextoDano("ERROU!", "#95a5a6", true); 
+            log(`Selo falhou! Maestria zerada.`, "#e74c3c"); 
+        }
+        document.getElementById('player-input').focus();
+    }
+
+    function vencerBatalha() {
+        clearInterval(enemyTimer); inBattle = false;
+        
+        if (enemy.flawless !== false) {
+            player.mastery[enemy.kanji].streak++;
+            if (player.mastery[enemy.kanji].streak > player.mastery[enemy.kanji].maxStreak) {
+                player.mastery[enemy.kanji].maxStreak = player.mastery[enemy.kanji].streak;
+            }
+        }
+
+        const xpTotal = ((isGymMode ? 30 : 20) * (enemy.rarityKey === 'ur' ? 3 : enemy.rarityKey === 'sr' ? 2 : 1)) + Math.floor(player.mastery[enemy.kanji].streak / 2);
+        const goldGain = (isGymMode ? 15 : 10) * (enemy.rarityKey === 'ur' ? 2 : 1); 
+        
+        player.xp += xpTotal; 
+        player.gold += goldGain;
+        player.dex[`${enemy.id}_${enemy.rarityKey}`] = (player.dex[`${enemy.id}_${enemy.rarityKey}`] || 0) + 1;
+        
+        if (enemy.isBoss) {
+            log(`VITÓRIA ÉPICA! +${xpTotal}XP | +${goldGain}💰`, "var(--gold)");
+        } else {
+            log(`VITÓRIA! +${xpTotal}XP | +${goldGain}💰`, "var(--success)");
+        }
+        
+        // Verifica se o XP chegou no limite dinâmico da curva de dificuldade
+        let xpNecessario = (player.level * 200) + 400;
+        let isLevelUpPending = (player.xp >= xpNecessario);
+
+        salvarJogo(); 
+        gymFightsLeft--;
+        
+        const continuarJornada = () => {
+            if (gymFightsLeft > 0) {
+                setTimeout(spawnEnemy, 1000); 
+            } else {
+                if (isGymMode) {
+                    const frasesSabedoria = [
+                    "【Mestre do Dojo diz:】\n「高い山も、一歩から。」\n(takai yama mo, ippo kara)\nAté uma montanha alta começa com um passo.",
+                    "【Mestre do Dojo diz:】\n「雨の後には、必ず花が咲きます。」\n(ame no ato ni wa, kanarazu hana ga sakimasu)\nDepois da chuva, as flores sempre desabrocham.",
+                    "【Mestre do Dojo diz:】\n「時間は金です。大切に使いましょう。」\n(jikan wa kane desu. taisetsu ni tsukaimashou)\nO tempo é dinheiro. Use-o com sabedoria.",
+                    "【Mestre do Dojo diz:】\n「毎日少しずつ本を読む。」\n(mainichi sukoshizutsu hon o yomu)\nLeia um livro um pouco a cada dia.",
+                    "【Mestre do Dojo diz:】\n「古い道から新しい言語を学ぶ。」\n(furui michi kara atarashii gengo o manabu)\nAprenda um novo idioma a partir dos velhos caminhos.",
+                    "【Mestre do Dojo diz:】\n「今を生きる」\n— ima o ikiru\nViva o agora. O passado já foi.",
+                    "【Mestre do Dojo diz:】\n「休むことも大切です」\n— yasumu koto mo taisetsu desu\nDescansar também faz parte do processo.",
+                    "【Mestre do Dojo diz:】\n「気を楽に」\n— ki o raku ni\nPegue leve com a sua própria mente.",
+                    "【Mestre do Dojo diz:】\n「大人は水をたくさん飲む」\n— otona wa mizu o takusan nomu\nBeba água. O corpo cobra.",
+                    "【Mestre do Dojo diz:】\n「お金は空から降らない」\n— okane wa sora kara furanai\nDinheiro não cai do céu.",
+                    "【Mestre do Dojo diz:】\n「スマホを出て、本を読む」\n— sumaho o dete, hon o yomu\nDesligue a tela. Leia um livro.",
+                    "【Mestre do Dojo diz:】\n「良い日、良い食」\n— yoi hi, yoi shoku\nUm bom dia começa com uma boa refeição.",
+                    "【Mestre do Dojo diz:】\n「長い道も一歩から」\n— nagai michi mo ippo kara\nA jornada mais longa começa com um único passo.",
+                    "【Mestre do Dojo diz:】\n「大きい木はゆっくり育つ」\n— ookii ki wa yukkuri sodatsu\nGrandes árvores crescem devagar. Sem pressa.",
+                    "【Mestre do Dojo diz:】\n「外に出る勇気」\n— soto ni deru yuuki\nTenha coragem de dar o primeiro passo para fora.",
+                    "【Mestre do Dojo diz:】\n「新しい日、新しい気」\n— atarashii hi, atarashii ki\nNovo dia, nova energia.",
+                    "【Mestre do Dojo diz:】\n「古い友は金より高い」\n— furui tomo wa kin yori takai\nUm velho amigo vale mais que ouro.",
+                    "【Mestre do Dojo diz:】\n「話す前に、見る」\n— hanasu mae ni, miru\nAntes de falar, observe.",
+                    "【Mestre do Dojo diz:】\n「失敗は学びの母」\n— shippai wa manabi no haha\nO erro é a mãe do aprendizado.",
+                    "【Mestre do Dojo diz:】\n「前を見て歩く」\n— mae o mite aruku\nOlhe para frente e continue andando.",
+                    "【Mestre do Dojo diz:】\n「小さいことから始める」\n— chiisai koto kara hajimeru\nAs maiores mudanças começam pequenas.",
+                    "【Mestre do Dojo diz:】\n「目と耳を開く」\n— me to mimi o hiraku\nMantenha os olhos e ouvidos abertos.",
+                    "【Mestre do Dojo diz:】\n「高い山を越える」\n— takai yama o koeru\nNenhuma montanha é intransponível.",
+                    "【Mestre do Dojo diz:】\n「毎日、少し学ぶ」\n— mainichi, sukoshi manabu\nA constância sempre vence o talento.",
+                    "【Mestre do Dojo diz:】\n「自分の足で立つ」\n— jibun no ashi de tatsu\nFique de pé usando as próprias pernas.",
+                    "【Mestre do Dojo diz:】\n「雨の後、天が白い」\n— ame no ato, ten ga shiroi\nDepois da chuva, o céu sempre clareia.",
+                    "【Mestre do Dojo diz:】\n「安いものにも心がある」\n— yasui mono ni mo kokoro ga aru\nTudo tem seu valor, até o que custa pouco.",
+                    "【Mestre do Dojo diz:】\n「半分空か、半分水か」\n— hanbun kuu ka, hanbun mizu ka\nMetade vazio ou metade cheio? A escolha é sua.",
+                    "【Mestre do Dojo diz:】\n「月の下で書く」\n— tsuki no shita de kaku\nEscreva sua própria história, mesmo no escuro.",
+                    "【Mestre do Dojo diz:】\n「心の火を消さない」\n— kokoro no hi o kesanai\nNão deixe o fogo da sua vontade apagar.",
+                    "【Mestre do Dojo diz:】\n「右か左か、自分で決める」\n— migi ka hidari ka, jibun de kimeru\nDireita ou esquerda? Assuma o controle.",
+                    "【Mestre do Dojo diz:】\n「休日は何もしない」\n— kyuujitsu wa nani mo shinai\nNos dias de folga, não fazer nada é o certo.",
+                    "【Mestre do Dojo diz:】\n「良い話は人を作る」\n— yoi hanashi wa hito o tsukuru\nBoas histórias constroem boas pessoas.",
+                    "【Mestre do Dojo diz:】\n「大人は時々泣く」\n— otona wa tokidoki naku\nAdultos também choram. Faz parte.",
+                    "【Mestre do Dojo diz:】\n「買って後悔するな」\n— katte koukai suru na\nSe trabalhou duro por isso, não se arrependa.",
+                    "【Mestre do Dojo diz:】\n「空のように広く」\n— sora no you ni hiroku\nMantenha a mente tão vasta quanto o céu.",
+                    "【Mestre do Dojo diz:】\n「生きることは道です」\n— ikiru koto wa michi desu\nViver é apenas trilhar um caminho.",
+                    "【Mestre do Dojo diz:】\n「外の音をシャットアウト」\n— soto no oto o shattoauto\nÀs vezes, você só precisa silenciar o mundo lá fora.",
+                    "【Mestre do Dojo diz:】\n「学校の外にも学びがある」\n— gakkou no soto ni mo manabi ga aru\nO mundo ensina mais que a escola.",
+                    "【Mestre do Dojo diz:】\n「電気を消して、休む」\n— denki o keshite, yasumu\nApague as luzes e vá descansar.",
+                    "【Mestre do Dojo diz:】\n「人の目を見る」\n— hito no me o miru\nOlhe nos olhos. Pratique a empatia.",
+                    "【Mestre do Dojo diz:】\n「一人の時間を楽しむ」\n— hitori no jikan o tanoshimu\nAprenda a gostar da sua própria companhia.",
+                    "【Mestre do Dojo diz:】\n「今週も生き延びた」\n— konshuu mo ikinobita\nVocê sobreviveu a mais uma semana. Orgulhe-se.",
+                    "【Mestre do Dojo diz:】\n「手で作るものは美しい」\n— te de tsukuru mono wa utsukushii\nO que é feito à mão tem alma.",
+                    "【Mestre do Dojo diz:】\n「土に足をつける」\n— tsuchi ni ashi o tsukeru\nMantenha os pés no chão. Seja humilde.",
+                    "【Mestre do Dojo diz:】\n「今、何を見る？」\n— ima, nani o miru?\nFoco no agora. O que está na sua frente?",
+                    "【Mestre do Dojo diz:】\n「子から大人へ」\n— ko kara otona e\nCrescer dói, mas é necessário.",
+                    "【Mestre do Dojo diz:】\n「知らない国へ行く」\n— shiranai kuni e iku\nVá explorar lugares que você não conhece.",
+                    "【Mestre do Dojo diz:】\n「駅で友を待つ」\n— eki de tomo o matsu\nA paciência é como esperar um amigo na estação.",
+                    "【Mestre do Dojo diz:】\n「人に花をあげる」\n— hito ni hana o ageru\nDê flores às pessoas enquanto elas podem sentir o cheiro.",
+                    "【Mestre do Dojo diz:】\n「車より歩く」\n— kuruma yori aruku\nEsqueça o carro hoje. Caminhe e sinta a cidade.",
+                    "【Mestre do Dojo diz:】\n「名は長く残る」\n— na wa nagaku nokoru\nO seu legado dura mais que você.",
+                    "【Mestre do Dojo diz:】\n「小さい川も海に行く」\n— chiisai kawa mo umi ni iku\nTodo rio pequeno um dia encontra o mar.",
+                    "【Mestre do Dojo diz:】\n「父と母に感謝する」\n— chichi to haha ni kansha suru\nPerdoe e agradeça às suas raízes.",
+                    "【Mestre do Dojo diz:】\n「出口は新しい入口」\n— deguchi wa atarashii iriguchi\nToda saída é apenas a porta para algo novo."
+                ];
+                const sabedoria = frasesSabedoria[Math.floor(Math.random() * frasesSabedoria.length)];
+
+                    setTimeout(() => {
+                        vibrar([100, 50, 100, 50, 300]);
+                        mostrarDialogo("<span style='color:var(--gold)'>🏆 GINÁSIO CONCLUÍDO! 🏆</span><br><br>" + sabedoria, () => { trocarTela('screen-main'); });
+                    }, 800);
+                } else {
+                    setTimeout(() => trocarTela('screen-main'), 1500);
+                }
+            }
+        };
+
+        // Chama a tela de escolha se o nível estiver pronto
+        if (isLevelUpPending) {
+            mostrarEscolhaLevelUp(continuarJornada);
+        } else {
+            continuarJornada(); 
+        }
+    }
+
+// --- SISTEMA DE ENSINO (Dicas e Mnemônicos) ---
+    function obterHistoriaKanji(kanji) {
+        // Você pode ir adicionando as historinhas dos seus 94 kanjis aqui com o tempo!
+        const historias = {
+            '一': "Apenas uma linha horizontal. Representa o número 1.",
+            '二': "Duas linhas. O número 2. Simples assim.",
+            '三': "Três linhas. O número 3.",
+            '木': "Lembra uma árvore. A linha reta é o tronco, a de cima os galhos e as de baixo as raízes.",
+            '水': "Representa a água fluindo. O traço do meio é o rio, os lados são os respingos.",
+            '火': "Lembra uma fogueira, com as chamas subindo e faíscas dos lados.",
+            '日': "Originalmente era desenhado como um círculo com um ponto no meio (o sol).",
+            '月': "O formato de uma lua crescente com nuvens passando pelo meio dela.",
+            '人': "Uma pessoa de perfil, em pé, com as pernas abertas caminhando.",
+            '口': "Um quadrado que representa uma boca aberta."
+        };
+        
+        // Se a história ainda não foi escrita, ele dá uma dica genérica
+        return historias[kanji] || "Observe os traços deste Kanji. Como eles se conectam com o significado? Crie sua própria associação visual para não esquecê-lo na próxima vez!";
+    }
+
+    function analisarInimigo() { 
+        if (!inBattle) return; 
+        
+        document.getElementById('player-input').blur(); // Tira o teclado
+        clearInterval(enemyTimer); // Pausa a luta
+        
+        // Punição por espiar
+        enemy.flawless = false; 
+        enemy.battleHits = 0; 
+        player.mastery[enemy.kanji].errors++; 
+        player.mastery[enemy.kanji].streak = 0; 
+        document.getElementById('combo-text').style.display = "none"; 
+        
+        player.hp -= enemy.atk; 
+        flashArenaVermelho(); 
+        atualizarHUD(); 
+        
+        if (player.hp <= 0) return gameOver(); 
+
+        const historia = obterHistoriaKanji(enemy.kanji);
+        const vocabFormatado = enemy.vocab.map(v => `• ${v}`).join('<br>');
+        
+        // --- NOVO LAYOUT COMPACTO E LIMPO (Estilo Pokedex) ---
+        const textoAula = `
+            <div style="display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px;">
+                <div style="font-size: 70px; color: var(--gold); text-shadow: 0 0 15px rgba(241,196,15,0.6); line-height: 1; font-family: 'Noto Sans JP', sans-serif;">
+                    ${enemy.kanji}
+                </div>
+                <div style="flex: 1; text-align: left;">
+                    <div style="font-size: 15px; color: #fff; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">
+                        ${enemy.sig.join(' / ')}
+                    </div>
+                    <div style="font-size: 13px; color: #e67e22; margin-top: 5px; font-weight: bold;">
+                        🗣️ ${enemy.romaji.join(', ')}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="font-size: 13px; color: #bdc3c7; margin-bottom: 10px; border-left: 3px solid #3498db; padding-left: 10px; font-style: italic; line-height: 1.3;">
+                "${historia}"
+            </div>
+            
+            <div style="font-size: 13px; line-height: 1.5; max-height: 35vh; overflow-y: auto; padding-right: 5px;">
+                <span style="color: var(--success); font-weight: bold;">📖 Na Prática:</span><br>
+                ${vocabFormatado}
+            </div>
+        `;
+
+        // Passamos "true" no final para ele aparecer INSTANTANEAMENTE
+        mostrarDialogo(textoAula, () => {
+            iniciarTimerInimigo(); 
+            if (window.innerWidth > 600) document.getElementById('player-input').focus();
+        }, true);
+    }
+
+    function usarPocao() { if (player.potions > 0 && player.hp < player.maxHp) { player.potions--; player.hp = Math.min(player.maxHp, player.hp + 50); criarTextoDano("+50", "var(--success)", false); log("Poção usada!", "var(--success)"); salvarJogo(); document.getElementById('player-input').focus(); } }
+    function fugir() { clearInterval(enemyTimer); inBattle = false; log(`Fugiu! Era ${enemy.sig[0]}`, "#e67e22"); setTimeout(() => trocarTela('screen-main'), 1000); }
+    function gameOver() { clearInterval(enemyTimer); inBattle = false; player.gold = Math.floor(player.gold / 2); player.hp = player.maxHp; salvarJogo(); vibrar([200, 100, 200]); mostrarDialogo("Você desmaiou de exaustão...\nMetade do seu ouro foi perdido.", () => { trocarTela('screen-main'); }); }
+    function curarNaBase() { if (player.gold >= 50 && player.hp < player.maxHp) { player.gold -= 50; player.hp = player.maxHp; salvarJogo(); } }
+    function comprarPocao() { if (player.gold >= 30) { player.gold -= 30; player.potions++; salvarJogo(); } }
+
+    function abrirPokedex() {
+        trocarTela('screen-pokedex'); 
+        document.getElementById('dex-search').value = ""; // Limpa a busca ao abrir
+        atualizarFiltrosPokedex();
+    }
+
+    function atualizarFiltrosPokedex() {
+        const container = document.getElementById('pokedex-container'); 
+        container.innerHTML = "";
+        
+        const termo = document.getElementById('dex-search').value.toLowerCase().trim();
+        const filtro = document.getElementById('dex-filter').value;
+        const ordem = document.getElementById('dex-sort').value;
+
+        // 1. Filtrar e Montar a Lista de Cartas
+        let cartasRenderizar = [];
+        
+        DATABASE.forEach(dbK => {
+            // Verifica se a busca bate com o Kanji, o Romaji ou o Significado (português)
+            const termoLimpo = termo.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const matchSearch = termo === "" || 
+                                dbK.kanji.includes(termo) || 
+                                dbK.romaji.some(r => r.includes(termo)) || 
+                                dbK.sig.some(s => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(termoLimpo));
+            
+            if (!matchSearch) return; // Pula se não bater na pesquisa
+
+            Object.keys(RARITIES).forEach(rKey => {
+                const count = player.dex[`${dbK.id}_${rKey}`] || 0;
+                
+                // Aplica Filtro (Obtidos/Faltantes)
+                if (filtro === 'obtidos' && count === 0) return;
+                if (filtro === 'faltantes' && count > 0) return;
+
+                // Salva a carta na lista temporária para depois organizar
+                const mData = player.mastery[dbK.kanji] || { maxStreak: 0, streak: 0, errors: 0 };
+                cartasRenderizar.push({ dbK, rKey, count, mData });
+            });
+        });
+
+        // 2. Sistema Inteligente de Ordenação
+        if (ordem === 'maestria_asc') {
+            cartasRenderizar.sort((a, b) => {
+                if (a.mData.maxStreak !== b.mData.maxStreak) return a.mData.maxStreak - b.mData.maxStreak; // Menor pro Maior
+                return a.dbK.id - b.dbK.id; // Desempate pelo ID
+            });
+        } else if (ordem === 'maestria_desc') {
+            cartasRenderizar.sort((a, b) => {
+                if (a.mData.maxStreak !== b.mData.maxStreak) return b.mData.maxStreak - a.mData.maxStreak; // Maior pro Menor
+                return a.dbK.id - b.dbK.id; // Desempate pelo ID
+            });
+        } else {
+            const rankMap = { 'c': 1, 'r': 2, 'sr': 3, 'ur': 4, 'lr': 5 };
+            cartasRenderizar.sort((a, b) => {
+                if (a.dbK.id !== b.dbK.id) return a.dbK.id - b.dbK.id;
+                return rankMap[a.rKey] - rankMap[b.rKey]; // Exibe C, R, SR, UR, LR
+            });
+        }
+
+        // 3. Renderizar as Cartas na Tela
+        cartasRenderizar.forEach(item => {
+            const { dbK, rKey, count, mData } = item;
+            const div = document.createElement('div'); 
+            div.className = `dex-entry ${count ? 'r-'+rKey : 'locked'}`;
+            
+            if (count) {
+                let medal = mData.maxStreak >= 20 ? '<span class="medal m-gold">MESTRE</span>' : mData.maxStreak >= 10 ? '<span class="medal m-silver">ESPECIAL</span>' : mData.maxStreak >= 5 ? '<span class="medal m-bronze">APRENDIZ</span>' : "";
+                div.innerHTML = `<div class="card-count">${count}</div><div class="dex-kanji">${dbK.kanji}</div><div style="font-size:11px; font-weight:bold;">${RARITIES[rKey].name}</div>${medal}`;
+                div.onclick = () => verCartaDetalhada(dbK, rKey, RARITIES[rKey], mData);
+            } else {
+                div.innerHTML = `<div class="dex-kanji locked">?</div><div style="font-size:11px; color:#555;">${RARITIES[rKey].name}</div>`;
+            }
+            container.appendChild(div);
+        });
+    }
+
+    function verCartaDetalhada(dbK, rKey, rData, mData) {
+        document.getElementById('modal-details-title').innerHTML = `${dbK.kanji} (${dbK.romaji[0]})`; 
+        document.getElementById('modal-details-rarity').innerHTML = `Significados: ${dbK.sig.join(', ')}`; 
+        document.getElementById('modal-details-rarity').className = rData.color; 
+        document.getElementById('modal-details-sig').innerHTML = `Raridade: ${rData.name}`;
+        
+        const vocabEl = document.getElementById('modal-details-vocab');
+        if (dbK.vocab && dbK.vocab.length > 0) {
+            vocabEl.innerHTML = `Prática: <br>• ${dbK.vocab.join('<br>• ')}`;
+            vocabEl.style.display = 'block';
+        } else {
+            vocabEl.style.display = 'none';
+        }
+        
+        document.getElementById('modal-details-mastery').innerHTML = `Recorde de Maestria: ${mData.maxStreak} acertos`;
+        
+        const imgContainer = document.getElementById('modal-image-container'); 
+        imgContainer.innerHTML = ""; // Limpa a carta antiga
+        imgContainer.style.position = "relative"; // Prende as partículas aqui
+
+        // --- EFEITOS PREMIUM LENDÁRIA OTIMIZADOS ---
+        if (rKey === 'lr') {
+            const aura = document.createElement('div');
+            aura.className = 'modal-lr-aura';
+            imgContainer.appendChild(aura);
+
+            // Agora sim! O dobro de partículas, com trava de segurança para não explodir celulares antigos
+            const qtdParticulas = window.innerWidth < 600 ? 35 : 70;
+            for(let i=0; i<qtdParticulas; i++) {
+                const spark = document.createElement('div');
+                spark.className = 'modal-spark';
+                spark.style.left = Math.floor(Math.random() * 100) + '%';
+                spark.style.top = Math.floor(Math.random() * 100) + '%';
+                spark.style.animationDelay = (Math.random() * 4) + 's';
+                spark.style.animationDuration = (2 + Math.random() * 3) + 's';
+                const corSpark = Math.random() > 0.5 ? '#ff00ff' : '#00ffff';
+                spark.style.background = corSpark;
+                spark.style.boxShadow = `0 0 10px 2px ${corSpark}`;
+                imgContainer.appendChild(spark);
+            }
+        }
+
+        const levitator = document.createElement('div');
+        levitator.className = 'levitate-wrapper';
+        if (rKey === 'lr') levitator.classList.add('levitate-anim');
+        
+        // A MÁGICA: Transformamos o container num escudo plano invisível que captura o mouse
+        levitator.style.position = 'relative';
+        levitator.style.pointerEvents = 'auto'; 
+
+        const wrapper = document.createElement('div'); 
+        wrapper.className = `card-image-wrapper r-${rKey}`; 
+        wrapper.style.pointerEvents = 'none'; // A carta que gira agora é imune ao mouse (adeus piscadas/lag)
+        
+        const clip = document.createElement('div'); 
+        clip.className = 'card-border-clip'; 
+        
+        const imgEl = document.createElement('img'); 
+        imgEl.src = `${URL_IMAGENS}${dbK.id}_${rKey === 'lr' ? 'ur' : rKey}.jpg`; 
+        imgEl.className = 'modal-card-img'; 
+        imgEl.onerror = () => { imgEl.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAMLCwgAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=='; clip.style.background = '#111'; clip.style.minHeight = '300px'; }; 
+        
+        clip.appendChild(imgEl); 
+        
+        const holo = document.createElement('div'); holo.className = 'holo'; 
+        const gloss = document.createElement('div'); gloss.className = 'gloss'; 
+        const kanjiText = document.createElement('div'); kanjiText.innerHTML = dbK.kanji; kanjiText.className = `kanji-overlay ${rKey === 'lr' ? 'text-rainbow' : ''}`;
+        
+        wrapper.appendChild(clip); 
+        wrapper.appendChild(holo); 
+        wrapper.appendChild(gloss); 
+        wrapper.appendChild(kanjiText); 
+        
+        levitator.appendChild(wrapper);
+        imgContainer.appendChild(levitator); 
+        
+        document.getElementById('card-modal').classList.add('active'); 
+        
+        // Mandamos o "levitator" como o alvo estático que lê o seu mouse
+        ativar3D(wrapper, holo, gloss, rKey, levitator);
+    }
+
+    function fecharModal(e) { if (!e || e.target.id === 'card-modal' || e.target.className === 'close-modal') document.getElementById('card-modal').classList.remove('active'); }
+
+    // O Motor 3D reescrito para parar de vazar memória
+    function ativar3D(card, holo, gloss, rKey, triggerBox) {
+        let cx=0, cy=0, tx=0, ty=0; 
+        let px=50, py=50; 
+        let isHovering = false; 
+        let leaveTimeout; 
+        
+        let holoColor1 = "rgba(255,0,255,.4)"; let holoColor2 = "rgba(0,255,255,.4)"; let glowStrength = 0.5;
+        
+        if (rKey === 'ur') { holoColor1 = "rgba(255,159,67,.5)"; holoColor2 = "rgba(255,255,255,.5)"; } 
+        else if (rKey === 'sr') { holoColor1 = "rgba(241,196,15,.5)"; holoColor2 = "rgba(255,255,255,.4)"; } 
+        else if (rKey === 'r') { holoColor1 = "rgba(189,195,199,.5)"; holoColor2 = "rgba(255,255,255,.3)"; } 
+        else if (rKey === 'c') { holoColor1 = "rgba(255,255,255,.2)"; holoColor2 = "rgba(255,255,255,.1)"; glowStrength = 0.4; }
+        
+        const mover = (clientX, clientY) => {
+            clearTimeout(leaveTimeout); 
+            isHovering = true;
+            // Lê o movimento a partir da "HitBox" parada, e não da carta torcida
+            const r = triggerBox.getBoundingClientRect(); 
+            const x = clientX - r.left; const y = clientY - r.top; 
+            const mx = r.width / 2; const my = r.height / 2; 
+            tx = ((my - y) / my) * 15; ty = ((x - mx) / mx) * 15; 
+            px = (x / r.width) * 100; py = (y / r.height) * 100; 
+        };
+
+        const sair = () => { 
+            tx = 0; ty = 0; 
+            leaveTimeout = setTimeout(() => { 
+                isHovering = false;
+                holo.style.background = "none"; 
+                gloss.style.background = "none"; 
+            }, 300); 
+        };
+
+        // Ouve a Hitbox, não a carta!
+        triggerBox.addEventListener("mousemove", (e) => mover(e.clientX, e.clientY));
+        triggerBox.addEventListener("mouseleave", sair);
+        triggerBox.addEventListener("touchmove", (e) => { e.preventDefault(); mover(e.touches[0].clientX, e.touches[0].clientY); }, {passive: false});
+        triggerBox.addEventListener("touchend", sair);
+
+        function animate() { 
+            // O MATADOR DE FANTASMAS: Se o modal for fechado, o loop comete suicídio e libera sua RAM na hora.
+            if (!document.body.contains(card) || !document.getElementById('card-modal').classList.contains('active')) {
+                card.style.transform = `rotateX(0deg) rotateY(0deg) scale(1)`; 
+                return; // Morre o cálculo matemático.
+            }
+            
+            cx += (tx - cx) * .15; cy += (ty - cy) * .15; 
+            card.style.transform = `rotateX(${cx}deg) rotateY(${cy}deg) scale(1.05)`; 
+            
+            if (isHovering) {
+                if (rKey === 'lr' || rKey === 'ur' || rKey === 'sr') {
+                    holo.style.background = `radial-gradient(circle at ${px}% ${py}%, rgba(255,255,255,${glowStrength}), ${holoColor1}, ${holoColor2}, transparent 45%)`; 
+                } else {
+                    holo.style.background = `radial-gradient(circle at ${px}% ${py}%, rgba(255,255,255,${glowStrength}), ${holoColor1}, transparent 40%)`; 
+                }
+                gloss.style.background = `radial-gradient(circle at ${px}% ${py}%, rgba(255,255,255,${glowStrength}), transparent 45%)`;
+            }
+
+            requestAnimationFrame(animate); 
+        } 
+        animate();
+    }
+
+    // Motor do Indicador de Scroll (Baseado no Nível)
+    window.addEventListener('scroll', () => {
+        const indicator = document.getElementById('scroll-indicator');
+        if (indicator && window.scrollY > 30) {
+            indicator.classList.remove('visible'); // Esconde ao rolar para baixo
+        }
+    });
+
+    // ==========================================
+    // MOTOR DE INSTALAÇÃO DO APP (PWA)
+    // ==========================================
+    let promptDeInstalacao;
+    const btnInstall = document.getElementById('btn-install');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Impede o Android de mostrar aquele aviso chato na tela toda sozinho
+        e.preventDefault();
+        // Guarda a permissão oficial do celular na memória
+        promptDeInstalacao = e;
+        // Acende o nosso botão laranja e lindo no menu!
+        btnInstall.style.display = 'flex';
+    });
+
+    btnInstall.addEventListener('click', async () => {
+        if (promptDeInstalacao) {
+            // Dispara a janela oficial do celular perguntando se quer instalar
+            promptDeInstalacao.prompt();
+            // Espera a pessoa clicar em "Sim" ou "Não"
+            const { outcome } = await promptDeInstalacao.userChoice;
+            if (outcome === 'accepted') {
+                console.log('Jogador instalou o App!');
+                btnInstall.style.display = 'none'; // Some com o botão depois de instalar
+            }
+            promptDeInstalacao = null; // Limpa a memória
+        }
+    });
+
+    init();
+</script>
+
+<div id="scroll-indicator" class="visible">▼ Deslize para explorar ▼</div>
+
+</body>
+</html>

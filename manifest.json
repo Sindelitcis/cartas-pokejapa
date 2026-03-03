@@ -1,0 +1,21 @@
+{
+  "name": "KanjiMon Ultimate",
+  "short_name": "KanjiMon",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0a0a12",
+  "theme_color": "#0a0a12",
+  "description": "Treine Kanjis, abra boosters e torne-se um Mestre KanjiMon!",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/KanjiMon.webp",
+      "sizes": "192x192",
+      "type": "image/webp"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/Sindelitcis/cartas-pokejapa/main/KanjiMon.webp",
+      "sizes": "512x512",
+      "type": "image/webp"
+    }
+  ]
+}
